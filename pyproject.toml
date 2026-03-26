@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ciphie"
+version = "0.1.0"
+description = "Secrets Manager opensource — guarda y gestiona secretos de forma segura"
+requires-python = ">=3.11"
+readme = "README.md"
+
+# El comando `ciphie` en la terminal apunta a la función main() de cli.py
+[project.scripts]
+ciphie = "app.cli:main"
+
+# Le dice a setuptools que el código fuente está en backend/
+# Así encuentra el paquete `app` en backend/app/
+[tool.setuptools.packages.find]
+where = ["backend"]
