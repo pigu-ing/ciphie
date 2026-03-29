@@ -1,33 +1,44 @@
 # Ciphie 🔐
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-WIP-orange)
 
-**Ciphie** es un gestor de secretos opensource construido con Python.
+**Ciphie** es un gestor de secretos local construido con Python puro.
 Permite almacenar, recuperar y gestionar secretos cifrados (API keys, contraseñas, tokens)
-de forma segura a través de una API REST.
+de forma segura desde una aplicación de escritorio con interfaz estilo terminal.
 
 ---
 
 ## Features
 
-- Almacenamiento cifrado de secretos con Fernet (AES-128)
-- Autenticación con tokens JWT
-- API REST documentada automáticamente con Swagger UI
-- Base de datos SQLite para desarrollo, PostgreSQL-ready para producción
-- Frontend en Streamlit (próximamente)
+- Cifrado **AES-256-GCM** con nonce aleatorio por cada secreto
+- Derivación de clave segura con **HKDF-SHA256**
+- Hashing de contraseñas con **PBKDF2-HMAC-SHA256** (310.000 iteraciones — OWASP 2023)
+- Registro y autenticación de usuarios con protección contra timing attacks
+- Aislamiento por usuario: cada secreto está vinculado a su propietario
+- Base de datos **SQLite** local (sin servidor)
+- Interfaz de escritorio **Tkinter** con tema oscuro estilo terminal
+  - Botones grises (`#8b949e` exterior, `#21262d` interior) — sin botones blancos del sistema
+  - Campos de contraseña con candado 🔒/🔓 para mostrar u ocultar el texto
+- Registro con **verificación de cuenta por código** enviado al email (y SMS si Twilio configurado)
+- **2FA en el inicio de sesión** con elección de método al momento del login:
+  - Email (código OTP)
+  - Celular / SMS (requiere Twilio — ver `.env`)
+  - App autenticadora TOTP (Google Authenticator, Authy)
+  - Touch ID / huella digital (macOS — requiere `pyobjc`)
+- Una sola dependencia obligatoria: `cryptography`
 
 ---
 
 ## Requisitos
 
-- Python 3.11+
+- Python 3.9+
 - pip
 
 ---
 
-## Cómo correrlo
+## Instalación
 
 ### 1. Clona el repositorio
 
@@ -50,17 +61,31 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edita .env con tus valores reales
 ```
 
-### 4. Arranca el servidor
+Edita `.env` y añade tu clave maestra de cifrado:
+
+```
+MASTER_ENCRYPTION_KEY=<clave aleatoria>
+```
+
+Para generar una clave segura:
 
 ```bash
-uvicorn backend.app.main:app --reload
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-La API estará disponible en `http://localhost:8000`.
-La documentación interactiva en `http://localhost:8000/docs`.
+### 4. Arranca la aplicación
+
+```bash
+ciphie start
+```
+
+O directamente:
+
+```bash
+python frontend/app.py
+```
 
 ---
 
@@ -70,19 +95,42 @@ La documentación interactiva en `http://localhost:8000/docs`.
 ciphie/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py       # punto de entrada de FastAPI
-│   │   ├── models/       # modelos de base de datos (SQLAlchemy)
-│   │   ├── routes/       # endpoints de la API
-│   │   ├── services/     # lógica de negocio
-│   │   └── core/         # configuración, seguridad, cifrado
+│   │   ├── auth.py       # registro y autenticación de usuarios
+│   │   ├── crypto.py     # cifrado/descifrado AES-256-GCM
+│   │   ├── database.py   # operaciones SQLite
+│   │   ├── config.py     # configuración y carga del .env
+│   │   └── cli.py        # punto de entrada CLI
 │   └── tests/            # pruebas automatizadas
-├── frontend/             # interfaz Streamlit (próximamente)
+├── frontend/
+│   └── app.py            # interfaz de escritorio Tkinter
 ├── docs/
 │   └── journal.md        # diario de desarrollo
 ├── .env.example
 ├── requirements.txt
 └── CHANGELOG.md
 ```
+
+---
+
+## Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+---
+
+## Seguridad
+
+| Componente | Implementación |
+|---|---|
+| Cifrado de secretos | AES-256-GCM (AESGCM) |
+| Derivación de clave | HKDF-SHA256 |
+| Hash de contraseñas | PBKDF2-HMAC-SHA256, 310k iteraciones |
+| Comparación de hashes | `hmac.compare_digest` (tiempo constante) |
+| Nonce | 12 bytes aleatorios por cifrado (`os.urandom`) |
+| Aislamiento de datos | `owner_id` en cada secreto, verificado en todas las queries |
 
 ---
 

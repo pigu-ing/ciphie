@@ -38,10 +38,28 @@ def _cargar_env() -> None:
 _cargar_env()
 
 
+def get_smtp_config() -> dict:
+    """Devuelve la configuración SMTP del .env para enviar emails."""
+    return {
+        "host": os.environ.get("SMTP_HOST", ""),
+        "port": int(os.environ.get("SMTP_PORT", "587")),
+        "user": os.environ.get("SMTP_USER", ""),
+        "pass": os.environ.get("SMTP_PASS", ""),
+    }
+
+
+def get_twilio_config() -> dict:
+    """Devuelve la configuración Twilio del .env para enviar SMS."""
+    return {
+        "account_sid":  os.environ.get("TWILIO_ACCOUNT_SID", ""),
+        "auth_token":   os.environ.get("TWILIO_AUTH_TOKEN", ""),
+        "from_number":  os.environ.get("TWILIO_FROM_NUMBER", ""),
+    }
+
+
 def get_master_key() -> bytes:
     """
     Devuelve la clave maestra de cifrado como bytes.
-    Fernet requiere bytes, no str.
     Lanza RuntimeError si la variable no está configurada.
     """
     clave = os.environ.get("MASTER_ENCRYPTION_KEY", "")
@@ -49,6 +67,6 @@ def get_master_key() -> bytes:
         raise RuntimeError(
             "MASTER_ENCRYPTION_KEY no está configurada.\n"
             f"Edita el archivo {_ENV_FILE} y añade la clave.\n"
-            "Genera una con: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            "Genera una con: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
         )
     return clave.encode("utf-8")

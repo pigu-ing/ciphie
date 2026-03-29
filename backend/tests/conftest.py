@@ -6,13 +6,14 @@ los tests no interfieran entre sí ni con la base de datos real.
 """
 
 import os
+import secrets
 import tempfile
 from pathlib import Path
 
 import pytest
 
-# Configuramos la clave maestra ANTES de importar cualquier módulo de la app
-os.environ["MASTER_ENCRYPTION_KEY"] = "dGVzdC1rZXktZm9yLWNpcGhpZS10ZXN0aW5nLW9ubHk="
+# Generamos una clave aleatoria para tests (nunca hardcodeada en el código)
+os.environ["MASTER_ENCRYPTION_KEY"] = secrets.token_urlsafe(32)
 
 
 @pytest.fixture(autouse=True)

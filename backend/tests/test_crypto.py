@@ -14,7 +14,7 @@ class TestCifrar:
         assert cifrar("mi secreto") != "mi secreto"
 
     def test_dos_cifrados_del_mismo_valor_son_distintos(self):
-        # Fernet incluye un IV aleatorio: cada cifrado es diferente
+        # AES-256-GCM incluye un nonce aleatorio: cada cifrado es diferente
         assert cifrar("mismo valor") != cifrar("mismo valor")
 
 
@@ -44,7 +44,7 @@ class TestCifradoYBD:
         from app.auth import registrar_usuario
         from app.database import agregar_secreto, listar_secretos
 
-        usuario = registrar_usuario("alice", "a@b.com", "password123")
+        usuario = registrar_usuario("alice", "a@b.com", "password12345", "mi frase secreta")
         valor_original = "mi_api_key_secreta"
 
         agregar_secreto("API_KEY", cifrar(valor_original), usuario.id)
