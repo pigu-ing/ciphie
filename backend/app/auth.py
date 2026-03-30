@@ -1,13 +1,13 @@
 """
-app/auth.py — Registro e inicio de sesión de usuarios.
+app/auth.py — Registro e inicio de sesion de usuarios.
 
-Usa hashlib.pbkdf2_hmac (stdlib) para el hashing de contraseñas.
-PBKDF2-HMAC-SHA256 aplica la función de hash miles de veces, haciendo
+Usa hashlib.pbkdf2_hmac (stdlib) para el hashing de contrasenas.
+PBKDF2-HMAC-SHA256 aplica la funcion de hash miles de veces, haciendo
 los ataques de fuerza bruta lentos sin requerir paquetes externos.
 
-¿Por qué PBKDF2 y no SHA-256 directo?
-SHA-256 es rápido: un atacante puede probar miles de millones de contraseñas
-por segundo. PBKDF2 repite el hash 310.000 veces (recomendación OWASP 2023),
+Por que PBKDF2 y no SHA-256 directo?
+SHA-256 es rapido: un atacante puede probar miles de millones de contrasenas
+por segundo. PBKDF2 repite el hash 310.000 veces (recomendacion OWASP 2023),
 haciendo los ataques inviables en tiempo razonable.
 """
 
@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import os
+import re
 import random
 import sqlite3
 import struct
@@ -22,6 +23,7 @@ import time as _tiempo
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from email.header import Header
 from email.mime.text import MIMEText
 
 from app.database import get_connection
@@ -34,7 +36,7 @@ _otp_2fa_pendientes: dict = {}        # 2FA en login (email o SMS)
 
 @dataclass
 class Usuario:
-    """Representa un usuario autenticado (sin contraseña)."""
+    """Representa un usuario autenticado (sin contrasena)."""
     id: int
     username: str
     email: str
@@ -42,7 +44,7 @@ class Usuario:
 
 
 # ---------------------------------------------------------------------------
-# Hashing de contraseñas
+# Hashing de contrasenas
 # ---------------------------------------------------------------------------
 
 _ITERATIONS, _DKLEN = 310_000, 64
@@ -92,7 +94,15 @@ def _validar_email(email: str) -> str:
 
 def _validar_password(password: str) -> None:
     if len(password) < 12:
-        raise ValueError("La contraseña debe tener al menos 12 caracteres.")
+        raise ValueError("La contrasena debe tener al menos 12 caracteres.")
+
+
+def _validar_phone(phone: str) -> str:
+    """Valida numero de celular. Acepta formato E.164 (+54911...) o local."""
+    digitos = re.sub(r'[\s\-\(\)\.]', '', phone)
+    if not re.match(r'^\+?\d{7,15}$', digitos):
+        raise ValueError("El numero de celular no es valido (debe tener 7-15 digitos).")
+    return phone.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -125,18 +135,26 @@ def _verificar_otp(username: str, codigo: str, storage: dict) -> bool:
 # Envío de email
 # ---------------------------------------------------------------------------
 
+def _smtp_configurado() -> bool:
+    """Devuelve True si SMTP esta configurado en .env."""
+    from app.config import get_smtp_config
+    cfg = get_smtp_config()
+    return bool(cfg["host"] and cfg["user"] and cfg["pass"])
+
+
 def _enviar_email(to_email: str, subject: str, body: str) -> None:
-    """Envía un email via SMTP. Lanza RuntimeError si no está configurado."""
+    """Envia un email via SMTP. Lanza RuntimeError si no esta configurado."""
     import smtplib
     from app.config import get_smtp_config
 
     cfg = get_smtp_config()
     if not cfg["host"] or not cfg["user"]:
         raise RuntimeError(
-            "SMTP no configurado. Añade SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS al .env"
+            "SMTP no configurado. Agrega SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS al .env\n"
+            "Para Gmail usa una Contrasena de Aplicacion (no tu contrasena normal)."
         )
-    msg = MIMEText(body)
-    msg["Subject"] = subject
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = str(Header(subject, "utf-8"))
     msg["From"] = cfg["user"]
     msg["To"] = to_email
 
@@ -158,7 +176,7 @@ def _enviar_sms(to_phone: str, body: str) -> None:
     cfg = get_twilio_config()
     if not all([cfg["account_sid"], cfg["auth_token"], cfg["from_number"]]):
         raise RuntimeError(
-            "Twilio no configurado. Añade TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y "
+            "Twilio no configurado. Anade TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y "
             "TWILIO_FROM_NUMBER al .env"
         )
     url = (
@@ -223,58 +241,70 @@ def iniciar_registro(
     password: str,
     recovery_phrase: str,
     phone: "str | None" = None,
-) -> str:
+) -> "tuple[str, bool]":
     """
-    Crea un usuario pendiente de verificación (is_active=0) y envía un código
-    de verificación al email (y por SMS si phone está configurado).
-    Devuelve el username para que la UI navegue a la pantalla de verificación.
+    Crea un nuevo usuario y devuelve (username, needs_verification).
+
+    - Si SMTP esta configurado: crea usuario inactivo (is_active=0), envia OTP por email
+      y devuelve (username, True) para que la UI muestre pantalla de verificacion.
+    - Si SMTP NO esta configurado: activa el usuario directamente (is_active=1)
+      y devuelve (username, False) para que la UI vaya directo al login.
     """
     username = _validar_username(username)
     email = _validar_email(email)
     _validar_password(password)
     if not recovery_phrase.strip():
-        raise ValueError("La frase de recuperación no puede estar vacía.")
-    phone_limpio = phone.strip() if phone and phone.strip() else None
+        raise ValueError("La frase de recuperacion no puede estar vacia.")
+    phone_limpio = None
+    if phone and phone.strip():
+        phone_limpio = _validar_phone(phone)
 
     hashed = _hash_password(password)
     hashed_frase = _hash_password(recovery_phrase.strip())
+
+    smtp_ok = _smtp_configurado()
+    is_active_inicial = 0 if smtp_ok else 1
 
     try:
         with get_connection() as conn:
             conn.execute(
                 "INSERT INTO users "
                 "(username, email, hashed_password, hashed_recovery_phrase, phone_number, is_active) "
-                "VALUES (?, ?, ?, ?, ?, 0)",
-                (username, email, hashed, hashed_frase, phone_limpio),
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (username, email, hashed, hashed_frase, phone_limpio, is_active_inicial),
             )
             conn.commit()
     except sqlite3.IntegrityError as e:
         mensaje = str(e).lower()
         if "username" in mensaje:
-            raise ValueError("El nombre de usuario ya está en uso.")
+            raise ValueError("El nombre de usuario ya esta en uso.")
         if "email" in mensaje:
-            raise ValueError("El email ya está registrado.")
+            raise ValueError("El email ya esta registrado.")
         raise ValueError("Error al registrar el usuario.")
 
-    # Generar y enviar OTP de verificación
+    if not smtp_ok:
+        # Sin SMTP: cuenta activa directamente, sin verificacion por email
+        return username, False
+
+    # Con SMTP: generar y enviar OTP de verificacion
     codigo = _guardar_otp(username, _otp_registro_pendientes)
     _enviar_email(
         email,
-        f"Ciphie — código de verificación: {codigo}",
-        f"Tu código de verificación Ciphie es: {codigo}\n\n"
+        f"Ciphie - codigo de verificacion: {codigo}",
+        f"Tu codigo de verificacion Ciphie es: {codigo}\n\n"
         "Expira en 5 minutos. No lo compartas con nadie.",
     )
     if phone_limpio:
         try:
-            _enviar_sms(phone_limpio, f"Ciphie: tu código es {codigo}. Expira en 5 min.")
+            _enviar_sms(phone_limpio, f"Ciphie: tu codigo es {codigo}. Expira en 5 min.")
         except RuntimeError:
-            pass  # SMS opcional — si Twilio no está configurado, se ignora
+            pass  # SMS opcional — si Twilio no esta configurado, se ignora
 
-    return username
+    return username, True
 
 
 def reenviar_otp_registro(username: str) -> None:
-    """Reenvía el código de verificación de registro."""
+    """Reenvía el codigo de verificacion de registro."""
     with get_connection() as conn:
         fila = conn.execute(
             "SELECT email, phone_number FROM users WHERE username=? AND is_active=0",
@@ -286,13 +316,13 @@ def reenviar_otp_registro(username: str) -> None:
     codigo = _guardar_otp(username, _otp_registro_pendientes)
     _enviar_email(
         fila["email"],
-        f"Ciphie — código de verificación: {codigo}",
-        f"Tu código de verificación Ciphie es: {codigo}\n\n"
+        f"Ciphie - codigo de verificacion: {codigo}",
+        f"Tu codigo de verificacion Ciphie es: {codigo}\n\n"
         "Expira en 5 minutos. No lo compartas con nadie.",
     )
     if fila["phone_number"]:
         try:
-            _enviar_sms(fila["phone_number"], f"Ciphie: tu código es {codigo}. Expira en 5 min.")
+            _enviar_sms(fila["phone_number"], f"Ciphie: tu codigo es {codigo}. Expira en 5 min.")
         except RuntimeError:
             pass
 
@@ -371,11 +401,11 @@ def verificar_totp(secreto_b32: str, codigo: str) -> bool:
 
 def get_metodos_2fa_disponibles(username: str) -> list:
     """
-    Devuelve los métodos de 2FA disponibles para el usuario:
-      'email'    — siempre que SMTP esté configurado
-      'phone'    — si el usuario tiene phone_number y Twilio está configurado
-      'totp_app' — si el usuario tiene secreto TOTP activo
-    El método 'biometrico' lo evalúa el frontend (Touch ID en macOS).
+    Devuelve los metodos de 2FA disponibles para el usuario:
+      'email'      — si SMTP esta configurado
+      'phone'      — si el usuario tiene phone_number y Twilio esta configurado
+      'totp_app'   — si el usuario tiene secreto TOTP activo
+      'biometrico' — si el metodo configurado es biometrico (Touch ID/huella)
     """
     from app.config import get_smtp_config, get_twilio_config
 
@@ -402,11 +432,14 @@ def get_metodos_2fa_disponibles(username: str) -> list:
     if fila["totp_enabled"] and fila["totp_method"] == "app" and fila["totp_secret"]:
         metodos.append("totp_app")
 
+    if fila["totp_enabled"] and fila["totp_method"] == "biometrico":
+        metodos.append("biometrico")
+
     return metodos
 
 
 def generar_otp_2fa_email(username: str) -> None:
-    """Genera y envía OTP de 2FA por email."""
+    """Genera y envia OTP de 2FA por email."""
     with get_connection() as conn:
         fila = conn.execute(
             "SELECT email FROM users WHERE username=?", (username,)
@@ -416,8 +449,8 @@ def generar_otp_2fa_email(username: str) -> None:
     codigo = _guardar_otp(username, _otp_2fa_pendientes)
     _enviar_email(
         fila["email"],
-        f"Ciphie — código de acceso: {codigo}",
-        f"Tu código de verificación Ciphie es: {codigo}\n\n"
+        f"Ciphie - codigo de acceso: {codigo}",
+        f"Tu codigo de verificacion Ciphie es: {codigo}\n\n"
         "Expira en 5 minutos. No lo compartas con nadie.",
     )
 
@@ -486,7 +519,7 @@ def desactivar_2fa(user_id: int) -> None:
 
 def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None]":
     """
-    Primer paso: verifica usuario y contraseña.
+    Primer paso: verifica usuario y contrasena.
 
     Retorna:
         ('ok',            usuario) — sin 2FA, login completo
@@ -541,6 +574,41 @@ def autenticar_paso2_totp(username: str, codigo: str) -> "Usuario | None":
     if not verificar_totp(cfg["secret"], codigo):
         return None
     return _obtener_usuario_activo(username)
+
+
+# ---------------------------------------------------------------------------
+# Edicion de perfil de usuario
+# ---------------------------------------------------------------------------
+
+def actualizar_usuario(user_id: int, new_username: str = None, new_email: str = None) -> None:
+    """Actualiza username y/o email. Lanza ValueError si ya estan en uso."""
+    updates: list[str] = []
+    params: list = []
+    if new_username:
+        new_username = _validar_username(new_username)
+        updates.append("username = ?")
+        params.append(new_username)
+    if new_email:
+        new_email = _validar_email(new_email)
+        updates.append("email = ?")
+        params.append(new_email)
+    if not updates:
+        return
+    params.append(user_id)
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+    except sqlite3.IntegrityError as e:
+        msg = str(e).lower()
+        if "username" in msg:
+            raise ValueError("El nombre de usuario ya esta en uso.")
+        if "email" in msg:
+            raise ValueError("El email ya esta registrado.")
+        raise ValueError("Error al actualizar el usuario.")
 
 
 # Legado — mantenido para compatibilidad

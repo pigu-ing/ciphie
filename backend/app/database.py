@@ -214,6 +214,15 @@ def editar_secreto(
 
 def eliminar_secreto(secreto_id: int, owner_id: int) -> None:
     with get_connection() as conn:
+        # Verificar ownership antes de borrar
+        ok = conn.execute(
+            "SELECT id FROM secrets WHERE id = ? AND owner_id = ?",
+            (secreto_id, owner_id),
+        ).fetchone()
+        if ok is None:
+            return
+        # Borrar versiones primero (FK constraint)
+        conn.execute("DELETE FROM secret_versions WHERE secret_id = ?", (secreto_id,))
         conn.execute(
             "DELETE FROM secrets WHERE id = ? AND owner_id = ?",
             (secreto_id, owner_id),

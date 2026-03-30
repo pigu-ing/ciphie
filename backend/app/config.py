@@ -66,7 +66,7 @@ def get_master_key() -> bytes:
     if not clave:
         raise RuntimeError(
             "MASTER_ENCRYPTION_KEY no está configurada.\n"
-            f"Edita el archivo {_ENV_FILE} y añade la clave.\n"
+            f"Edita el archivo {_ENV_FILE} y anade la clave.\n"
             "Genera una con: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
         )
     return clave.encode("utf-8")

@@ -38,7 +38,7 @@ def cifrar(valor: str) -> str:
     Cada llamada produce un resultado diferente (nonce aleatorio de 12 bytes).
     """
     clave = _get_clave_aes()
-    nonce = os.urandom(12)  # 96 bits — tamaño recomendado para GCM
+    nonce = os.urandom(12)  # 96 bits — tamano recomendado para GCM
     aesgcm = AESGCM(clave)
     cifrado = aesgcm.encrypt(nonce, valor.encode("utf-8"), None)
     return base64.urlsafe_b64encode(nonce + cifrado).decode("utf-8")

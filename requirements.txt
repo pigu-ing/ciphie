@@ -1,7 +1,9 @@
-# La única dependencia externa de Ciphie.
-# AES (Fernet) no existe en la biblioteca estándar de Python,
-# por lo que necesitamos este paquete para el cifrado de secretos.
+# Cifrado AES-256-GCM
 cryptography==44.0.0
+
+# QR code para configuracion de 2FA con app autenticadora (opcional)
+# Si no se instala, el setup TOTP muestra instrucciones manuales en lugar del QR
+qrcode[pil]>=7.4
 
 # Testing
 pytest==8.3.4

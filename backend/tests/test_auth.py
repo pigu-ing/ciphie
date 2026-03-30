@@ -40,7 +40,7 @@ class TestRegistrarUsuario:
         with pytest.raises(ValueError, match="12 caracteres"):
             registrar_usuario("alice", "a@b.com", "corta", "frase")
 
-    def test_contraseña_no_se_guarda_en_plano(self):
+    def test_contrasena_no_se_guarda_en_plano(self):
         u = registrar_usuario("alice", "a@b.com", "password12345", "mi frase secreta")
         from app.database import get_connection
         with get_connection() as conn:
@@ -58,7 +58,7 @@ class TestAutenticarUsuario:
         assert u is not None
         assert u.username == "alice"
 
-    def test_contraseña_incorrecta_devuelve_none(self):
+    def test_contrasena_incorrecta_devuelve_none(self):
         registrar_usuario("alice", "alice@example.com", "password12345", "mi frase secreta")
         assert autenticar_usuario("alice", "wrongpassword") is None
 
@@ -66,7 +66,7 @@ class TestAutenticarUsuario:
         assert autenticar_usuario("fantasma", "password12345") is None
 
     def test_fallo_no_revela_causa(self):
-        """Contraseña incorrecta y usuario inexistente devuelven lo mismo (None)."""
+        """Contrasena incorrecta y usuario inexistente devuelven lo mismo (None)."""
         registrar_usuario("alice", "alice@example.com", "password12345", "mi frase secreta")
         assert autenticar_usuario("alice", "wrong") is None
         assert autenticar_usuario("noexiste", "password12345") is None

@@ -61,9 +61,9 @@ class TestVersionado:
     def test_multiples_ediciones_acumulan_versiones(self):
         u = _usuario()
         s = agregar_secreto("pass", cifrar("v1"), u.id)
-        editar_secreto(s.id, u.id, cifrar("v2"), "pass", "contraseña")
-        editar_secreto(s.id, u.id, cifrar("v3"), "pass", "contraseña")
-        editar_secreto(s.id, u.id, cifrar("v4"), "pass", "contraseña")
+        editar_secreto(s.id, u.id, cifrar("v2"), "pass", "contrasena")
+        editar_secreto(s.id, u.id, cifrar("v3"), "pass", "contrasena")
+        editar_secreto(s.id, u.id, cifrar("v4"), "pass", "contrasena")
         versiones = listar_versiones(s.id, u.id)
         assert len(versiones) == 3
         # Más reciente primero (v3, v2, v1)
@@ -96,7 +96,7 @@ class TestRestaurarVersion:
     def test_restaurar_recupera_valor_anterior(self):
         u = _usuario()
         s = agregar_secreto("pass", cifrar("original"), u.id)
-        editar_secreto(s.id, u.id, cifrar("modificado"), "pass", "contraseña")
+        editar_secreto(s.id, u.id, cifrar("modificado"), "pass", "contrasena")
         versiones = listar_versiones(s.id, u.id)
         restaurar_version(versiones[0].id, s.id, u.id)
         restaurado = obtener_secreto(s.id, u.id)
@@ -106,7 +106,7 @@ class TestRestaurarVersion:
         """Restaurar es reversible: guarda el valor actual antes de restaurar."""
         u = _usuario()
         s = agregar_secreto("pass", cifrar("v1"), u.id)
-        editar_secreto(s.id, u.id, cifrar("v2"), "pass", "contraseña")
+        editar_secreto(s.id, u.id, cifrar("v2"), "pass", "contrasena")
         versiones_antes = listar_versiones(s.id, u.id)
         restaurar_version(versiones_antes[0].id, s.id, u.id)
         versiones_despues = listar_versiones(s.id, u.id)
@@ -122,6 +122,6 @@ class TestRestaurarVersion:
         u1 = _usuario("alice")
         u2 = _usuario("bob")
         s = agregar_secreto("pass", cifrar("v1"), u1.id)
-        editar_secreto(s.id, u1.id, cifrar("v2"), "pass", "contraseña")
+        editar_secreto(s.id, u1.id, cifrar("v2"), "pass", "contrasena")
         ver = listar_versiones(s.id, u1.id)[0]
         assert restaurar_version(ver.id, s.id, u2.id) is False
