@@ -31,7 +31,8 @@ def _cargar_env() -> None:
         if not linea or linea.startswith("#") or "=" not in linea:
             continue
         clave, _, valor = linea.partition("=")
-        os.environ.setdefault(clave.strip(), valor.strip())
+        valor = valor.split("#")[0].strip()  # eliminar comentarios inline
+        os.environ.setdefault(clave.strip(), valor)
 
 
 # Cargamos el .env al importar este módulo

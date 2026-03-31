@@ -1308,7 +1308,9 @@ class PantallaDashboard(tk.Frame):
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=inner, anchor="nw")
         canvas.configure(xscrollcommand=sb_h.set)
+        canvas.unbind_all("<MouseWheel>")
         canvas.bind_all("<MouseWheel>", lambda e: canvas.xview_scroll(-1*(e.delta//120), "units"))
+        canvas.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
         canvas.pack(fill="both", expand=True)
         sb_h.pack(fill="x", side="bottom")
 
@@ -1580,7 +1582,7 @@ class PantallaDashboard(tk.Frame):
             return datetime.strptime(texto, "%Y-%m-%d").isoformat()
         except ValueError:
             _modal_msg(self._content, T("fecha_invalida"), T("formato_fecha"), "error")
-            return "error"
+            raise
 
     def _guardar_secreto(self):
         nombre    = self._nombre.get().strip()
@@ -1588,8 +1590,9 @@ class PantallaDashboard(tk.Frame):
         if not nombre:
             _modal_msg(self._content, T("campo_vacio"), T("ingresa_nombre"), "warning")
             return
-        expires_at = self._calcular_expires_at()
-        if expires_at == "error":
+        try:
+            expires_at = self._calcular_expires_at()
+        except ValueError:
             return
 
         # Leer campos del formulario dinamico
@@ -1937,7 +1940,9 @@ class PantallaDashboard(tk.Frame):
         canvas.create_window((0, 0), window=inner, anchor="nw", tags="inner")
         canvas.configure(yscrollcommand=sb.set)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig("inner", width=e.width))
+        canvas.unbind_all("<MouseWheel>")
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
+        canvas.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
         canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 

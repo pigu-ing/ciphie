@@ -14,24 +14,29 @@ haciendo los ataques inviables en tiempo razonable.
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import re
 import random
 import sqlite3
+import ssl
 import struct
 import time as _tiempo
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from email.header import Header
 from email.mime.text import MIMEText
+
+_log = logging.getLogger(__name__)
 
 from app.database import get_connection
 
 # OTPs en memoria — se limpian al verificar o al expirar (5 min)
-_otp_email_pendientes: dict = {}      # legado 2FA email pre-configurado
 _otp_registro_pendientes: dict = {}   # verificación de cuenta nueva
 _otp_2fa_pendientes: dict = {}        # 2FA en login (email o SMS)
+_otp_intentos: dict = {}              # intentos fallidos por username (se resetea al verificar)
 
 
 @dataclass
@@ -67,7 +72,8 @@ def _verify_password(password: str, hashed: str) -> bool:
             "sha256", password.encode("utf-8"), salt, _ITERATIONS, dklen=_DKLEN
         )
         return hmac.compare_digest(actual, esperado)
-    except Exception:
+    except Exception as e:
+        _log.warning("Hash corrupto al verificar contraseña: %s", e)
         return False
 
 
@@ -116,18 +122,28 @@ def _guardar_otp(username: str, storage: dict, ttl: int = 300) -> str:
     return codigo
 
 
+_MAX_OTP_INTENTOS = 5
+
+
 def _verificar_otp(username: str, codigo: str, storage: dict) -> bool:
-    """Verifica el OTP. Lo elimina si es correcto o si expiró."""
+    """Verifica el OTP. Lo elimina si es correcto, si expiró o si supera 5 intentos."""
     entrada = storage.get(username)
     if entrada is None:
         return False
     guardado, expira_en = entrada
     if _tiempo.time() > expira_en:
         del storage[username]
+        _otp_intentos.pop(username, None)
         return False
     if hmac.compare_digest(guardado, codigo.strip()):
         del storage[username]
+        _otp_intentos.pop(username, None)
         return True
+    # Intento fallido: incrementar contador y bloquear si alcanza el límite
+    _otp_intentos[username] = _otp_intentos.get(username, 0) + 1
+    if _otp_intentos[username] >= _MAX_OTP_INTENTOS:
+        del storage[username]
+        _otp_intentos.pop(username, None)
     return False
 
 
@@ -160,7 +176,7 @@ def _enviar_email(to_email: str, subject: str, body: str) -> None:
 
     with smtplib.SMTP(cfg["host"], cfg["port"]) as server:
         server.ehlo()
-        server.starttls()
+        server.starttls(context=ssl.create_default_context())
         server.login(cfg["user"], cfg["pass"])
         server.send_message(msg)
 
@@ -477,6 +493,7 @@ def verificar_otp_2fa(username: str, codigo: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def obtener_config_2fa(username: str) -> "dict | None":
+    from app.crypto import descifrar
     with get_connection() as conn:
         fila = conn.execute(
             "SELECT id, totp_enabled, totp_method, totp_secret, email, phone_number "
@@ -485,21 +502,30 @@ def obtener_config_2fa(username: str) -> "dict | None":
         ).fetchone()
     if fila is None:
         return None
+    secreto_raw = fila["totp_secret"]
+    secreto = None
+    if secreto_raw:
+        try:
+            secreto = descifrar(secreto_raw)
+        except Exception:
+            secreto = secreto_raw  # fallback para secretos en plaintext no migrados
     return {
         "user_id":      fila["id"],
         "enabled":      bool(fila["totp_enabled"]),
         "method":       fila["totp_method"],
-        "secret":       fila["totp_secret"],
+        "secret":       secreto,
         "email":        fila["email"],
         "phone_number": fila["phone_number"],
     }
 
 
 def activar_2fa(user_id: int, method: str, totp_secret: "str | None" = None) -> None:
+    from app.crypto import cifrar
+    secret_cifrado = cifrar(totp_secret) if totp_secret else None
     with get_connection() as conn:
         conn.execute(
             "UPDATE users SET totp_enabled=1, totp_method=?, totp_secret=? WHERE id=?",
-            (method, totp_secret, user_id),
+            (method, secret_cifrado, user_id),
         )
         conn.commit()
 
@@ -517,6 +543,10 @@ def desactivar_2fa(user_id: int) -> None:
 # Login en 2 pasos
 # ---------------------------------------------------------------------------
 
+_MAX_LOGIN_INTENTOS = 5
+_LOCKOUT_MINUTOS = 15
+
+
 def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None]":
     """
     Primer paso: verifica usuario y contrasena.
@@ -525,18 +555,57 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
         ('ok',            usuario) — sin 2FA, login completo
         ('2fa_requerido', None)    — credenciales ok, ir a pantalla de elección de método
         ('fallo',         None)    — credenciales incorrectas o cuenta inactiva
+        ('bloqueado',     None)    — cuenta bloqueada por demasiados intentos fallidos
     """
     with get_connection() as conn:
         fila = conn.execute(
-            "SELECT id, username, email, hashed_password, is_active, totp_enabled "
+            "SELECT id, username, email, hashed_password, is_active, totp_enabled, "
+            "failed_login_attempts, locked_until "
             "FROM users WHERE username=?",
             (username,),
         ).fetchone()
 
     if fila is None or not fila["is_active"]:
         return ("fallo", None)
+
+    # Verificar bloqueo por intentos fallidos
+    if fila["locked_until"]:
+        if datetime.now().isoformat() < fila["locked_until"]:
+            return ("bloqueado", None)
+        # Bloqueo expirado: limpiar
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE username=?",
+                (username,),
+            )
+            conn.commit()
+
     if not _verify_password(password, fila["hashed_password"]):
+        nuevos_intentos = (fila["failed_login_attempts"] or 0) + 1
+        if nuevos_intentos >= _MAX_LOGIN_INTENTOS:
+            bloqueado_hasta = (datetime.now() + timedelta(minutes=_LOCKOUT_MINUTOS)).isoformat()
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE users SET failed_login_attempts=?, locked_until=? WHERE username=?",
+                    (nuevos_intentos, bloqueado_hasta, username),
+                )
+                conn.commit()
+        else:
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE users SET failed_login_attempts=? WHERE username=?",
+                    (nuevos_intentos, username),
+                )
+                conn.commit()
         return ("fallo", None)
+
+    # Credenciales correctas: resetear contador
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE username=?",
+            (username,),
+        )
+        conn.commit()
 
     if not fila["totp_enabled"]:
         usuario = Usuario(
@@ -611,24 +680,3 @@ def actualizar_usuario(user_id: int, new_username: str = None, new_email: str = 
         raise ValueError("Error al actualizar el usuario.")
 
 
-# Legado — mantenido para compatibilidad
-def generar_otp_email(username: str, email: str) -> None:
-    codigo = _guardar_otp(username, _otp_email_pendientes)
-    _enviar_email(
-        email,
-        f"Ciphie — código: {codigo}",
-        f"Tu código de verificación Ciphie es: {codigo}\n\nExpira en 5 minutos.",
-    )
-
-
-def verificar_otp_email(username: str, codigo: str) -> bool:
-    return _verificar_otp(username, codigo, _otp_email_pendientes)
-
-
-def autenticar_paso2_email(username: str, codigo: str) -> "Usuario | None":
-    cfg = obtener_config_2fa(username)
-    if cfg is None or not cfg["enabled"] or cfg["method"] != "email":
-        return None
-    if not verificar_otp_email(username, codigo):
-        return None
-    return _obtener_usuario_activo(username)

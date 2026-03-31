@@ -25,8 +25,13 @@ de forma segura desde una aplicación de escritorio con interfaz estilo terminal
 - **2FA en el inicio de sesión** con elección de método al momento del login:
   - Email (código OTP)
   - Celular / SMS (requiere Twilio — ver `.env`)
-  - App autenticadora TOTP (Google Authenticator, Authy)
+  - App autenticadora TOTP (Google Authenticator, Authy) — secreto cifrado en BD
   - Touch ID / huella digital (macOS — requiere `pyobjc`)
+- **Campos por categoría** (plantillas dinámicas): `contrasena`, `tarjeta`, `api key`, `token`, `nota`, `env`, `otro`
+- **Soporte QR** para onboarding TOTP (opcional — requiere `qrcode[pil]`)
+- **Cierre de sesión automático** por inactividad (10 minutos)
+- **Internacionalización**: interfaz en español e inglés con cambio al vuelo
+- **Protección anti fuerza bruta**: bloqueo de cuenta tras 5 intentos fallidos
 - Una sola dependencia obligatoria: `cryptography`
 
 ---
@@ -131,6 +136,11 @@ python -m pytest tests/ -v
 | Comparación de hashes | `hmac.compare_digest` (tiempo constante) |
 | Nonce | 12 bytes aleatorios por cifrado (`os.urandom`) |
 | Aislamiento de datos | `owner_id` en cada secreto, verificado en todas las queries |
+| TOTP secrets | Cifrados con AES-256-GCM en la BD (igual que el resto de secretos) |
+| Protección contra fuerza bruta | Bloqueo de cuenta por 15 min tras 5 intentos de login fallidos |
+| OTPs | Se invalidan tras 5 intentos fallidos; TTL de 5 minutos |
+| TLS / SMTP | STARTTLS con verificación de certificado (`ssl.create_default_context()`) |
+| Permisos de BD | Archivo `ciphie.db` con permisos `0o600` (solo propietario) |
 
 ---
 

@@ -2,9 +2,12 @@
 app/database.py — Base de datos con sqlite3 (stdlib).
 """
 
+import os
 import sqlite3
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from app.config import DB_PATH
 
@@ -34,16 +37,18 @@ def inicializar_bd() -> None:
             )
         """)
         for columna, definicion in [
-            ("hashed_recovery_phrase", "TEXT"),
-            ("totp_enabled",           "INTEGER NOT NULL DEFAULT 0"),
-            ("totp_method",            "TEXT"),
-            ("totp_secret",            "TEXT"),
-            ("phone_number",           "TEXT"),
+            ("hashed_recovery_phrase",  "TEXT"),
+            ("totp_enabled",            "INTEGER NOT NULL DEFAULT 0"),
+            ("totp_method",             "TEXT"),
+            ("totp_secret",             "TEXT"),
+            ("phone_number",            "TEXT"),
+            ("failed_login_attempts",   "INTEGER NOT NULL DEFAULT 0"),
+            ("locked_until",            "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {columna} {definicion}")
-            except Exception:
-                pass
+            except sqlite3.OperationalError:
+                pass  # columna ya existe
 
         # ── Tabla secrets ─────────────────────────────────────────────────────
         conn.execute("""
@@ -64,8 +69,8 @@ def inicializar_bd() -> None:
         ]:
             try:
                 conn.execute(f"ALTER TABLE secrets ADD COLUMN {columna} {definicion}")
-            except Exception:
-                pass
+            except sqlite3.OperationalError:
+                pass  # columna ya existe
 
         # ── Tabla audit_log ───────────────────────────────────────────────────
         conn.execute("""
@@ -89,6 +94,32 @@ def inicializar_bd() -> None:
         """)
 
         conn.commit()
+
+    # Restringir permisos del archivo de BD a solo el propietario (0o600)
+    db_file = Path(DB_PATH)
+    if db_file.exists():
+        os.chmod(db_file, stat.S_IRUSR | stat.S_IWUSR)
+
+    # Migrar secretos TOTP de plaintext a cifrado (si los hay)
+    try:
+        from app.crypto import cifrar, descifrar
+        with get_connection() as conn:
+            filas = conn.execute(
+                "SELECT id, totp_secret FROM users "
+                "WHERE totp_enabled=1 AND totp_secret IS NOT NULL"
+            ).fetchall()
+            for fila in filas:
+                try:
+                    descifrar(fila["totp_secret"])  # ya cifrado, nada que hacer
+                except Exception:
+                    # plaintext → cifrar
+                    conn.execute(
+                        "UPDATE users SET totp_secret=? WHERE id=?",
+                        (cifrar(fila["totp_secret"]), fila["id"]),
+                    )
+            conn.commit()
+    except Exception:
+        pass  # MASTER_ENCRYPTION_KEY no configurada o no hay secretos TOTP
 
 
 # ---------------------------------------------------------------------------

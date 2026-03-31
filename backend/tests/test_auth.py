@@ -3,7 +3,15 @@ tests/test_auth.py — Tests para el módulo de autenticación.
 """
 
 import pytest
-from app.auth import autenticar_usuario, registrar_usuario
+from app.auth import (
+    autenticar_usuario,
+    autenticar_paso1,
+    registrar_usuario,
+    actualizar_usuario,
+    activar_2fa,
+    generar_secreto_totp,
+    _verify_password,
+)
 
 
 class TestRegistrarUsuario:
@@ -70,3 +78,80 @@ class TestAutenticarUsuario:
         registrar_usuario("alice", "alice@example.com", "password12345", "mi frase secreta")
         assert autenticar_usuario("alice", "wrong") is None
         assert autenticar_usuario("noexiste", "password12345") is None
+
+
+class TestAutenticarPaso1:
+    def test_sin_2fa_retorna_ok(self):
+        registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
+        resultado, usuario = autenticar_paso1("bob", "password12345")
+        assert resultado == "ok"
+        assert usuario is not None
+        assert usuario.username == "bob"
+
+    def test_con_2fa_retorna_2fa_requerido(self):
+        u = registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
+        secreto = generar_secreto_totp()
+        activar_2fa(u.id, "app", secreto)
+        resultado, usuario = autenticar_paso1("bob", "password12345")
+        assert resultado == "2fa_requerido"
+        assert usuario is None
+
+    def test_password_incorrecta_retorna_fallo(self):
+        registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
+        resultado, usuario = autenticar_paso1("bob", "wrongpassword")
+        assert resultado == "fallo"
+        assert usuario is None
+
+    def test_usuario_inexistente_retorna_fallo(self):
+        resultado, usuario = autenticar_paso1("nadie", "password12345")
+        assert resultado == "fallo"
+        assert usuario is None
+
+    def test_bloqueo_tras_5_intentos_fallidos(self):
+        registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
+        for _ in range(5):
+            autenticar_paso1("bob", "wrongpassword")
+        resultado, _ = autenticar_paso1("bob", "password12345")
+        assert resultado == "bloqueado"
+
+    def test_contador_se_resetea_en_login_exitoso(self):
+        registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
+        for _ in range(3):
+            autenticar_paso1("bob", "wrongpassword")
+        resultado, usuario = autenticar_paso1("bob", "password12345")
+        assert resultado == "ok"
+        assert usuario is not None
+        # Después del login exitoso, el contador debe estar en 0
+        from app.database import get_connection
+        with get_connection() as conn:
+            fila = conn.execute(
+                "SELECT failed_login_attempts FROM users WHERE username=?", ("bob",)
+            ).fetchone()
+        assert fila["failed_login_attempts"] == 0
+
+
+class TestVerifyPassword:
+    def test_hash_corrupto_devuelve_false_sin_raise(self):
+        assert _verify_password("cualquiercosa", "hash_corrupto_sin_dos_puntos") is False
+
+    def test_hash_con_bytes_no_hex_devuelve_false(self):
+        assert _verify_password("pass", "gggg:zzzz") is False
+
+
+class TestActualizarUsuario:
+    def test_cambia_username(self):
+        u = registrar_usuario("alice", "alice@example.com", "password12345", "frase")
+        actualizar_usuario(u.id, new_username="alicia")
+        u2 = autenticar_usuario("alicia", "password12345")
+        assert u2 is not None
+        assert u2.username == "alicia"
+
+    def test_username_duplicado_lanza_error(self):
+        u = registrar_usuario("alice", "alice@example.com", "password12345", "frase")
+        registrar_usuario("bob", "bob@example.com", "password12345", "frase")
+        with pytest.raises(ValueError, match="usuario"):
+            actualizar_usuario(u.id, new_username="bob")
+
+    def test_sin_cambios_no_lanza(self):
+        u = registrar_usuario("alice", "alice@example.com", "password12345", "frase")
+        actualizar_usuario(u.id)  # sin argumentos: no hace nada
