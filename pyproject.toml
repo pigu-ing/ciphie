@@ -4,16 +4,42 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ciphie"
-version = "0.1.0"
-description = "Secrets Manager opensource — guarda y gestiona secretos de forma segura"
+version = "1.0.0"
+description = "Secrets Manager opensource — guarda y gestiona secretos cifrados de forma segura"
 requires-python = ">=3.11"
 readme = "README.md"
+license = {text = "MIT"}
 
-# El comando `ciphie` en la terminal apunta a la función main() de cli.py
+# Única dependencia obligatoria
+dependencies = [
+    "cryptography>=42.0",
+]
+
+[project.optional-dependencies]
+# QR code en el setup de TOTP (pip install ciphie[qr])
+qr = ["qrcode[pil]>=7.4"]
+
+# SMS via Twilio (pip install ciphie[sms])
+sms = ["twilio>=8.0"]
+
+# Touch ID / biometría — solo macOS (pip install ciphie[macos])
+macos = ["pyobjc-framework-LocalAuthentication>=9.0; sys_platform == 'darwin'"]
+
+# Todo junto (pip install ciphie[all])
+all = [
+    "qrcode[pil]>=7.4",
+    "twilio>=8.0",
+    "pyobjc-framework-LocalAuthentication>=9.0; sys_platform == 'darwin'",
+]
+
+# El comando `ciphie` en la terminal apunta a main() de cli.py
 [project.scripts]
 ciphie = "app.cli:main"
 
-# Le dice a setuptools que el código fuente está en backend/
-# Así encuentra el paquete `app` en backend/app/
-[tool.setuptools.packages.find]
-where = ["backend"]
+# Paquetes incluidos y sus ubicaciones en el repo
+[tool.setuptools]
+packages = ["app", "frontend"]
+
+[tool.setuptools.package-dir]
+"app"      = "backend/app"
+"frontend" = "frontend"

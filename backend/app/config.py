@@ -8,14 +8,30 @@ Expone las rutas importantes y la clave maestra de cifrado.
 import os
 from pathlib import Path
 
-# Raíz del proyecto (dos niveles arriba de este archivo: app/ → backend/ → ciphie/)
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Ruta al archivo .env
-_ENV_FILE = PROJECT_ROOT / ".env"
+def _find_project_root() -> Path:
+    """
+    Determina el directorio raíz donde se guardan .env y ciphie.db.
 
-# La base de datos se guarda en la raíz del proyecto
-DB_PATH = PROJECT_ROOT / "ciphie.db"
+    Orden de precedencia:
+    1. Variable de entorno CIPHIE_HOME (ruta personalizada)
+    2. Directorio de trabajo actual, si contiene un .env (modo dev / backward compat)
+    3. ~/.ciphie/ (modo instalado con pip install)
+    """
+    if os.environ.get("CIPHIE_HOME"):
+        return Path(os.environ["CIPHIE_HOME"]).expanduser().resolve()
+    cwd = Path.cwd()
+    if (cwd / ".env").exists():
+        return cwd
+    # En modo instalado, el .env y la BD van en ~/.ciphie/
+    default = Path.home() / ".ciphie"
+    default.mkdir(exist_ok=True)
+    return default
+
+
+PROJECT_ROOT = _find_project_root()
+_ENV_FILE    = PROJECT_ROOT / ".env"
+DB_PATH      = PROJECT_ROOT / "ciphie.db"
 
 
 def _cargar_env() -> None:

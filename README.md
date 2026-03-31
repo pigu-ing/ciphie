@@ -1,12 +1,20 @@
 # Ciphie 🔐
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-WIP-orange)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 
 **Ciphie** es un gestor de secretos local construido con Python puro.
 Permite almacenar, recuperar y gestionar secretos cifrados (API keys, contraseñas, tokens)
 de forma segura desde una aplicación de escritorio con interfaz estilo terminal.
+
+---
+
+## Capturas de pantalla
+
+![Login](docs/screenshots/login.png)
+![Dashboard](docs/screenshots/dashboard.png)
+![2FA](docs/screenshots/2fa.png)
 
 ---
 
@@ -19,7 +27,6 @@ de forma segura desde una aplicación de escritorio con interfaz estilo terminal
 - Aislamiento por usuario: cada secreto está vinculado a su propietario
 - Base de datos **SQLite** local (sin servidor)
 - Interfaz de escritorio **Tkinter** con tema oscuro estilo terminal
-  - Botones grises (`#8b949e` exterior, `#21262d` interior) — sin botones blancos del sistema
   - Campos de contraseña con candado 🔒/🔓 para mostrar u ocultar el texto
 - Registro con **verificación de cuenta por código** enviado al email (y SMS si Twilio configurado)
 - **2FA en el inicio de sesión** con elección de método al momento del login:
@@ -38,59 +45,75 @@ de forma segura desde una aplicación de escritorio con interfaz estilo terminal
 
 ## Requisitos
 
-- Python 3.9+
+- Python 3.11+
 - pip
 
 ---
 
 ## Instalación
 
-### 1. Clona el repositorio
+### Opción A — con pip (recomendado)
+
+```bash
+pip install ciphie
+```
+
+Dependencias opcionales:
+
+```bash
+pip install "ciphie[qr]"    # QR en setup de TOTP
+pip install "ciphie[sms]"   # SMS via Twilio
+pip install "ciphie[macos]" # Touch ID (solo macOS)
+pip install "ciphie[all]"   # todo lo anterior
+```
+
+### Opción B — desde el código fuente
 
 ```bash
 git clone https://github.com/tu-usuario/ciphie.git
 cd ciphie
-```
-
-### 2. Crea un entorno virtual e instala dependencias
-
-```bash
 python -m venv .venv
 source .venv/bin/activate      # macOS / Linux
 # .venv\Scripts\activate       # Windows
-
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### 3. Configura las variables de entorno
+---
+
+## Primeros pasos
+
+### 1. Crear el archivo de configuración
 
 ```bash
 cp .env.example .env
 ```
 
-Edita `.env` y añade tu clave maestra de cifrado:
+> Si instalaste con `pip install ciphie`, crea el archivo en `~/.ciphie/.env`.
 
-```
-MASTER_ENCRYPTION_KEY=<clave aleatoria>
-```
-
-Para generar una clave segura:
+### 2. Generar y agregar la clave maestra
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-### 4. Arranca la aplicación
+Pegá el resultado en `.env`:
+
+```
+MASTER_ENCRYPTION_KEY=tu_clave_generada_aqui
+```
+
+### 3. Abrir la aplicación
 
 ```bash
 ciphie start
 ```
 
-O directamente:
+### 4. Registrarse y crear el primer secreto
 
-```bash
-python frontend/app.py
-```
+1. En la pantalla de login, hacé clic en **registrarse**
+2. Completá usuario, email y contraseña (mínimo 12 caracteres)
+3. Si configuraste SMTP en `.env`, verificá tu cuenta con el código que llegará al email
+4. Una vez dentro, usá **➕ nuevo** en el sidebar para agregar tu primer secreto
 
 ---
 
@@ -109,9 +132,10 @@ ciphie/
 ├── frontend/
 │   └── app.py            # interfaz de escritorio Tkinter
 ├── docs/
-│   └── journal.md        # diario de desarrollo
+│   ├── journal.md        # diario de desarrollo
+│   └── screenshots/      # capturas de pantalla
 ├── .env.example
-├── requirements.txt
+├── pyproject.toml
 └── CHANGELOG.md
 ```
 
@@ -120,8 +144,7 @@ ciphie/
 ## Tests
 
 ```bash
-cd backend
-python -m pytest tests/ -v
+python -m pytest backend/tests/ -v
 ```
 
 ---

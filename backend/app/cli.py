@@ -21,15 +21,20 @@ if str(_backend) not in sys.path:
     sys.path.insert(0, str(_backend))
 
 
-def _verificar_env(project_root: Path) -> None:
-    env_file = project_root / ".env"
-    if not env_file.exists():
+def _verificar_env() -> None:
+    from app.config import PROJECT_ROOT, _ENV_FILE
+    if not _ENV_FILE.exists():
         print("[ERROR] No se encontro el archivo .env")
         print()
-        print("Crea uno a partir del ejemplo:")
-        print(f"  cp {project_root}/.env.example {project_root}/.env")
+        print(f"Crea el archivo de configuracion en: {PROJECT_ROOT}")
         print()
-        print("Luego edita .env y rellena los valores reales.")
+        print("  1. Copia el ejemplo:")
+        print(f"       cp .env.example {_ENV_FILE}")
+        print()
+        print("  2. Genera una clave maestra:")
+        print('       python -c "import secrets; print(secrets.token_urlsafe(32))"')
+        print()
+        print("  3. Pega la clave en .env como MASTER_ENCRYPTION_KEY=<clave>")
         sys.exit(1)
 
 
@@ -85,31 +90,31 @@ def _autenticar_cli() -> "tuple":
 
 
 def cmd_start(args: argparse.Namespace) -> None:
-    project_root = Path(__file__).resolve().parent.parent.parent
-    _verificar_env(project_root)
-
-    frontend = project_root / "frontend" / "app.py"
-    if not frontend.exists():
-        print(f"[ERROR] No se encontro el frontend en: {frontend}")
-        sys.exit(1)
-
-    env = os.environ.copy()
-    backend_dir = str(project_root / "backend")
-    env["PYTHONPATH"] = backend_dir + (":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-
+    _verificar_env()
     print("Iniciando Ciphie...")
-    resultado = subprocess.run(
-        [sys.executable, str(frontend)],
-        env=env,
-        cwd=str(project_root),
-    )
-    sys.exit(resultado.returncode)
+    try:
+        # Modo instalado (pip install ciphie): frontend es un paquete Python
+        import frontend.app as gui
+        gui.main()
+    except ImportError:
+        # Fallback modo desarrollo: ejecutar frontend/app.py como script
+        project_root = Path(__file__).resolve().parent.parent.parent
+        frontend_path = project_root / "frontend" / "app.py"
+        if not frontend_path.exists():
+            print(f"[ERROR] No se encontro el frontend en: {frontend_path}")
+            sys.exit(1)
+        env = os.environ.copy()
+        backend_dir = str(project_root / "backend")
+        sep = ";" if sys.platform == "win32" else ":"
+        env["PYTHONPATH"] = backend_dir + (sep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        resultado = subprocess.run([sys.executable, str(frontend_path)], env=env,
+                                   cwd=str(project_root))
+        sys.exit(resultado.returncode)
 
 
 def cmd_secrets_list(args: argparse.Namespace) -> None:
     """Lista los secretos del usuario."""
-    project_root = Path(__file__).resolve().parent.parent.parent
-    _verificar_env(project_root)
+    _verificar_env()
 
     from app.database import inicializar_bd, listar_secretos
     inicializar_bd()
@@ -130,8 +135,7 @@ def cmd_secrets_list(args: argparse.Namespace) -> None:
 
 def cmd_secrets_get(args: argparse.Namespace) -> None:
     """Muestra el valor de un secreto por nombre."""
-    project_root = Path(__file__).resolve().parent.parent.parent
-    _verificar_env(project_root)
+    _verificar_env()
 
     from app.database import inicializar_bd, listar_secretos
     from app.crypto import descifrar
@@ -174,8 +178,7 @@ def cmd_secrets_get(args: argparse.Namespace) -> None:
 
 def cmd_secrets_add(args: argparse.Namespace) -> None:
     """Agrega un nuevo secreto."""
-    project_root = Path(__file__).resolve().parent.parent.parent
-    _verificar_env(project_root)
+    _verificar_env()
 
     from app.database import inicializar_bd, agregar_secreto, registrar_auditoria
     from app.crypto import cifrar

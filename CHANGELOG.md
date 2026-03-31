@@ -9,30 +9,45 @@ y este proyecto sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] - 2026-03-31
+
+### Added
+- **Instalación con pip**: `pyproject.toml` completo con `pip install ciphie`. Dependencias opcionales: `ciphie[qr]` (QR TOTP), `ciphie[sms]` (Twilio), `ciphie[macos]` (Touch ID). Única dependencia obligatoria: `cryptography`.
+- **Compatibilidad multiplataforma**: `ciphie start` funciona en Windows, macOS y Linux. El separador de PYTHONPATH usa `os.pathsep`; pyobjc solo se instala en macOS.
+- **Directorio de configuración portátil**: `config.py` resuelve automáticamente la ruta de `.env` y `ciphie.db` — directorio actual en modo dev, `~/.ciphie/` tras `pip install`. Configurable via `CIPHIE_HOME`.
+- **Internacionalización completa**: nombres de categorías y campos del formulario ahora se traducen al cambiar de idioma. Funciones `TC()`, `TF()`, `_cat_key()` en el frontend.
+- **Auditoría de accesos**: tabla `audit_log`; vista "📋 actividad" con entradas color-coded.
+- **Versionado de secretos**: tabla `secret_versions`; historial por secreto con botón "restaurar" reversible.
+- **Expiración de secretos**: columna `expires_at`; íconos ⚠️/🔴 y banner de alerta. Dropdown con opciones 30/60/90 días o fecha personalizada.
+- **Edición de secretos**: menú ⋮ con ver, copiar, editar, historial, eliminar.
+- **Campos por categoría**: formularios dinámicos con plantillas (`PLANTILLAS_CAMPOS`). Categorías: `contrasena`, `tarjeta`, `api key`, `token`, `nota`, `env`, `otro`. Secretos serializados como JSON multi-campo.
+- **2FA completo**: TOTP (app autenticadora), email OTP, SMS (Twilio), Touch ID (macOS). Método elegible en tiempo de login.
+- **QR en setup TOTP**: modal de activación con QR (si `qrcode[pil]` instalado) o instrucciones manuales.
+- **Cierre de sesión por inactividad**: 10 minutos sin actividad → vuelve al login.
+- **CLI ampliado**: `ciphie secrets list/get/add` con autenticación interactiva y soporte 2FA.
+- **Suite de tests**: 88 tests en verde cubriendo auth, 2FA, registro, secretos, versionado, auditoría, expiración y crypto.
+
 ### Security
-- **TOTP secrets cifrados**: los secretos de autenticador TOTP ahora se almacenan cifrados con AES-256-GCM en la BD (igual que el resto de secretos). Migración automática al inicializar si hay secretos en plaintext.
-- **Rate-limiting en login**: bloqueo de cuenta por 15 minutos tras 5 intentos de contraseña fallidos. Columnas `failed_login_attempts` y `locked_until` en la tabla `users` (migración automática). `autenticar_paso1()` retorna `("bloqueado", None)` cuando aplica.
-- **OTPs anti fuerza bruta**: los OTPs (registro y 2FA) se invalidan automáticamente tras 5 intentos fallidos de verificación.
-- **STARTTLS con verificación TLS**: `_enviar_email()` ahora pasa `ssl.create_default_context()` a `starttls()`, evitando ataques MITM en el canal SMTP.
-- **Permisos de BD**: `inicializar_bd()` aplica `chmod 0o600` al archivo `ciphie.db` después de crearlo.
+- **TOTP secrets cifrados**: almacenados con AES-256-GCM (mismo mecanismo que el resto de secretos). Migración automática de registros en plaintext al inicializar.
+- **Rate-limiting en login**: bloqueo de cuenta por 15 minutos tras 5 intentos fallidos. Columnas `failed_login_attempts` / `locked_until` con migración automática.
+- **OTPs anti fuerza bruta**: invalidación automática tras 5 intentos fallidos; TTL de 5 minutos.
+- **STARTTLS con verificación TLS**: `ssl.create_default_context()` en `_enviar_email()`, evitando MITM en el canal SMTP.
+- **Permisos de BD**: `ciphie.db` creado con permisos `0o600` (solo propietario).
+- **PBKDF2-HMAC-SHA256**: 310.000 iteraciones (recomendación OWASP 2023) para hashing de contraseñas.
+- **Comparación en tiempo constante**: `hmac.compare_digest` en verificación de passwords y OTPs.
 
 ### Fixed
-- `_calcular_expires_at()` ya no retorna la cadena `"error"` como centinela; ahora lanza `ValueError` y el caller hace early return con `except ValueError`.
-- `MouseWheel` en canvas: se llama `unbind_all` antes de cada `bind_all` y se desvincula en el evento `<Destroy>` para evitar acumulación de handlers al navegar entre vistas.
-- `ALTER TABLE` en migraciones captura `sqlite3.OperationalError` específicamente en lugar de `Exception` genérico.
-- `_verify_password()` loguea la excepción con `logging.warning` en lugar de silenciarla.
-- Parser de `.env` elimina comentarios inline (`CLAVE=valor # comentario` ahora funciona correctamente).
-- `.env.example`: corregida instrucción de generación de `MASTER_ENCRYPTION_KEY` (era Fernet, ahora `secrets.token_urlsafe(32)` que es lo que usa el código).
+- `_calcular_expires_at()` lanza `ValueError` en lugar de retornar el sentinel `"error"`.
+- `MouseWheel` en canvas: `unbind_all` antes de `bind_all` y en evento `<Destroy>`.
+- `ALTER TABLE` en migraciones captura `sqlite3.OperationalError` específicamente.
+- `_verify_password()` loguea excepciones en lugar de silenciarlas.
+- Parser de `.env` elimina comentarios inline.
+- `.env.example`: instrucción de generación de clave corregida (era Fernet).
 
 ### Removed
-- Funciones legacy de 2FA email: `generar_otp_email()`, `verificar_otp_email()`, `autenticar_paso2_email()` — estaban rotas (usaban el dict `_otp_email_pendientes` en lugar de `_otp_2fa_pendientes` donde se generan los códigos reales).
-
-### Added (tests)
-- `test_2fa.py`: 11 tests cubriendo activar/desactivar 2FA, cifrado de TOTP en BD, OTP email, invalidación por intentos.
-- `test_secrets.py`: 8 tests cubriendo eliminación con cascada de versiones, ownership, restauración de versiones.
-- `test_registro.py`: 6 tests cubriendo flujo con y sin SMTP (mockeando `_enviar_email`), verificación de OTP.
-- `test_auth.py` ampliado: 10 tests nuevos para `autenticar_paso1`, rate-limiting, `_verify_password` con hash corrupto, `actualizar_usuario`.
-- Suite completa: **88 tests**, todos en verde.
+- Funciones legacy rotas de 2FA email: `generar_otp_email()`, `verificar_otp_email()`, `autenticar_paso2_email()`.
 
 ---
 
