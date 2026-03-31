@@ -419,6 +419,15 @@ TEXTOS: dict = {
         # criterios barra contraseña
         "criterio_len": "12+ chars", "criterio_case": "may/min",
         "criterio_num": "números", "criterio_special": "símbolos",
+        # nombres de categorías
+        "cat_contrasena": "contraseña", "cat_tarjeta": "tarjeta", "cat_api_key": "api key",
+        "cat_token": "token", "cat_nota": "nota", "cat_env": "env", "cat_otro": "otro",
+        # nombres de campos
+        "campo_usuario": "usuario", "campo_contrasena": "contraseña", "campo_url": "url",
+        "campo_notas": "notas", "campo_numero": "número", "campo_titular": "titular",
+        "campo_expiracion": "expiración", "campo_cvv": "cvv", "campo_banco": "banco",
+        "campo_clave": "clave", "campo_endpoint": "endpoint", "campo_token": "token",
+        "campo_servicio": "servicio", "campo_contenido": "contenido", "campo_valor": "valor",
     },
     "en": {
         "subtitulo": "[ secrets manager ]",
@@ -554,6 +563,15 @@ TEXTOS: dict = {
         # criterios barra contraseña
         "criterio_len": "12+ chars", "criterio_case": "upper/lower",
         "criterio_num": "numbers", "criterio_special": "symbols",
+        # category names
+        "cat_contrasena": "password", "cat_tarjeta": "card", "cat_api_key": "api key",
+        "cat_token": "token", "cat_nota": "note", "cat_env": "env", "cat_otro": "other",
+        # field names
+        "campo_usuario": "username", "campo_contrasena": "password", "campo_url": "url",
+        "campo_notas": "notes", "campo_numero": "number", "campo_titular": "cardholder",
+        "campo_expiracion": "expiration", "campo_cvv": "cvv", "campo_banco": "bank",
+        "campo_clave": "key", "campo_endpoint": "endpoint", "campo_token": "token",
+        "campo_servicio": "service", "campo_contenido": "content", "campo_valor": "value",
     },
 }
 
@@ -566,6 +584,24 @@ def T(key: str, **kwargs) -> str:
         except (KeyError, ValueError):
             pass
     return texto
+
+
+def TC(cat: str) -> str:
+    """Traduce el nombre interno de una categoría para mostrar en la UI."""
+    return T("cat_" + cat.replace(" ", "_"))
+
+
+def TF(field: str) -> str:
+    """Traduce el nombre interno de un campo para mostrar como etiqueta."""
+    return T("campo_" + field)
+
+
+def _cat_key(display: str) -> str:
+    """Convierte el nombre de categoría mostrado (traducido) al key interno en español."""
+    for cat in CATEGORIAS:
+        if TC(cat) == display:
+            return cat
+    return display  # fallback: si no matchea, devuelve tal cual
 
 
 # ---------------------------------------------------------------------------
@@ -1193,8 +1229,8 @@ class PantallaDashboard(tk.Frame):
         cf = tk.Frame(fila, bg=BG)
         cf.pack(side="left")
         tk.Label(cf, text=T("categoria_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG).pack(anchor="w")
-        self._categoria = tk.StringVar(value=CATEGORIAS[0])
-        om = tk.OptionMenu(cf, self._categoria, *CATEGORIAS, command=self._actualizar_campos_inicio)
+        self._categoria = tk.StringVar(value=TC(CATEGORIAS[0]))
+        om = tk.OptionMenu(cf, self._categoria, *[TC(c) for c in CATEGORIAS], command=self._actualizar_campos_inicio)
         om.configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
                      highlightbackground=BG_ENTRY, relief="flat", font=FONT_SMALL,
                      cursor="hand2", width=12)
@@ -1230,11 +1266,12 @@ class PantallaDashboard(tk.Frame):
         for w in self._campos_frame.winfo_children():
             w.destroy()
         self._campos_entradas = {}
-        plantilla = PLANTILLAS_CAMPOS.get(categoria, PLANTILLAS_CAMPOS["otro"])
+        cat_key = _cat_key(categoria)
+        plantilla = PLANTILLAS_CAMPOS.get(cat_key, PLANTILLAS_CAMPOS["otro"])
         for campo in plantilla:
             nombre = campo["nombre"]
             tipo   = campo["tipo"]
-            tk.Label(self._campos_frame, text=f"{nombre}:", font=FONT_SMALL,
+            tk.Label(self._campos_frame, text=f"{TF(nombre)}:", font=FONT_SMALL,
                      fg=FG_DIM, bg=BG).pack(anchor="w")
             if tipo == "textarea":
                 txt = tk.Text(self._campos_frame, font=FONT_MONO, bg=BG_ENTRY, fg=FG,
@@ -1251,7 +1288,7 @@ class PantallaDashboard(tk.Frame):
                 e = _entry(self._campos_frame, width=50)
                 e.pack(fill="x", ipady=4, pady=(2, 8))
                 # Auto-fill "usuario" con el usuario logueado en la categoria contrasena
-                if nombre == "usuario" and categoria == "contrasena":
+                if nombre == "usuario" and cat_key == "contrasena":
                     e.insert(0, self.usuario.username)
                 self._campos_entradas[nombre] = e
 
@@ -1329,7 +1366,7 @@ class PantallaDashboard(tk.Frame):
             # Cabecera de columna
             hdr_col = tk.Frame(col, bg=cat_color)
             hdr_col.pack(fill="x", pady=(0, 8))
-            tk.Label(hdr_col, text=f"  {cat}  ({len(por_cat[cat])})",
+            tk.Label(hdr_col, text=f"  {TC(cat)}  ({len(por_cat[cat])})",
                      font=FONT_SMALL, fg="#0d1117", bg=cat_color, width=22
                      ).pack(anchor="w", pady=4)
 
@@ -1586,7 +1623,7 @@ class PantallaDashboard(tk.Frame):
 
     def _guardar_secreto(self):
         nombre    = self._nombre.get().strip()
-        categoria = self._categoria.get()
+        categoria = _cat_key(self._categoria.get())
         if not nombre:
             _modal_msg(self._content, T("campo_vacio"), T("ingresa_nombre"), "warning")
             return
@@ -1706,7 +1743,7 @@ class PantallaDashboard(tk.Frame):
                     self._copiar_al_portapapeles(v, f"{secreto.name}/{n}")
                     registrar_auditoria(self.usuario.id, "copiar", secreto.name)
                     cerrar()
-                _boton(box, f"> {nombre_campo}", _hacer_copia).pack(fill="x", ipady=4, pady=(0, 4))
+                _boton(box, f"> {TF(nombre_campo)}", _hacer_copia).pack(fill="x", ipady=4, pady=(0, 4))
             _boton_oscuro(box, T("cancelar"), cerrar).pack(fill="x", ipady=4, pady=(4, 0))
         self._modal(construir)
 
@@ -1762,8 +1799,8 @@ class PantallaDashboard(tk.Frame):
             e_nombre.pack(fill="x", ipady=4, pady=(2, 8))
 
             tk.Label(box, text=T("categoria_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG_PANEL).pack(anchor="w")
-            cat_var = tk.StringVar(value=secreto.category)
-            om = tk.OptionMenu(box, cat_var, *CATEGORIAS)
+            cat_var = tk.StringVar(value=TC(secreto.category))
+            om = tk.OptionMenu(box, cat_var, *[TC(c) for c in CATEGORIAS])
             om.configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
                          highlightbackground=BG_ENTRY, relief="flat", font=FONT_SMALL, cursor="hand2")
             om["menu"].configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER,
@@ -1779,7 +1816,7 @@ class PantallaDashboard(tk.Frame):
             for campo in plantilla:
                 nc = campo["nombre"]
                 tipo = campo["tipo"]
-                tk.Label(campos_frame, text=f"  {nc}:", font=FONT_TINY,
+                tk.Label(campos_frame, text=f"  {TF(nc)}:", font=FONT_TINY,
                          fg=FG_DIM, bg=BG_PANEL).pack(anchor="w")
                 if tipo == "textarea":
                     txt = tk.Text(campos_frame, font=FONT_MONO, bg=BG_ENTRY, fg=FG,
@@ -1824,7 +1861,7 @@ class PantallaDashboard(tk.Frame):
 
             def _guardar():
                 nuevo_nombre = e_nombre.get().strip() or secreto.name
-                nuevo_cat    = cat_var.get()
+                nuevo_cat    = _cat_key(cat_var.get())
                 opcion_exp   = exp_var.get()
 
                 # Leer todos los campos
