@@ -422,6 +422,7 @@ TEXTOS: dict = {
         # criterios barra contraseña
         "criterio_len": "12+ chars", "criterio_case": "may/min",
         "criterio_num": "números", "criterio_special": "símbolos",
+        "simbolo_invalido": "(Este símbolo no está permitido)",
         # nombres de categorías
         "cat_contrasena": "contraseña", "cat_tarjeta": "tarjeta", "cat_api_key": "api key",
         "cat_token": "token", "cat_nota": "nota", "cat_env": "env", "cat_otro": "otro",
@@ -566,6 +567,7 @@ TEXTOS: dict = {
         # criterios barra contraseña
         "criterio_len": "12+ chars", "criterio_case": "upper/lower",
         "criterio_num": "numbers", "criterio_special": "symbols",
+        "simbolo_invalido": "(This symbol is not allowed)",
         # category names
         "cat_contrasena": "password", "cat_tarjeta": "card", "cat_api_key": "api key",
         "cat_token": "token", "cat_nota": "note", "cat_env": "env", "cat_otro": "other",
@@ -844,6 +846,8 @@ class PantallaRegistro(tk.Frame):
             self._segmentos.append(seg)
         self._nivel_label = tk.Label(cont, text="", font=FONT_SMALL, fg=FG_DIM, bg=BG, anchor="e")
         self._nivel_label.pack(fill="x", pady=(3,0))
+        self._lbl_simbolo_invalido = tk.Label(cont, text="", font=FONT_TINY, fg=DANGER, bg=BG, anchor="w")
+        self._lbl_simbolo_invalido.pack(fill="x")
 
     def _actualizar_barra_y_match(self):
         self._actualizar_barra()
@@ -862,6 +866,8 @@ class PantallaRegistro(tk.Frame):
             self._criterio_labels[key].configure(
                 text=f"{'✓' if cumple else '✗'} {nombres[key]}",
                 fg=ACCENT if cumple else FG_DIM)
+        hay_invalido = bool(re.search(r'[^a-zA-Z0-9!@#$%^&*()\-_=+\[\]{};:\'",.<>?/\\|`~ ]', pw))
+        self._lbl_simbolo_invalido.configure(text=T("simbolo_invalido") if hay_invalido else "")
 
     def _actualizar_match(self):
         pw1 = self._entradas["Contrasena"].get()
