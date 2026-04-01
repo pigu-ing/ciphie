@@ -32,6 +32,9 @@ try:
 except ImportError:
     _QR_OK = False
 
+# Logo de la aplicacion
+_LOGO_PATH = Path(__file__).resolve().parent / "public" / "▌.png"
+
 # Tiempo de inactividad antes de cerrar sesion automaticamente (ms)
 INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000  # 10 minutos
 
@@ -666,6 +669,10 @@ class Aplicacion(tk.Tk):
         self.resizable(False, False)
         self.configure(bg=BG)
         self.eval("tk::PlaceWindow . center")
+        if _QR_OK and _LOGO_PATH.exists():
+            _icon = ImageTk.PhotoImage(Image.open(_LOGO_PATH).resize((64, 64), Image.LANCZOS))
+            self.iconphoto(True, _icon)
+            self._logo_icon = _icon  # mantener referencia
         self.ir_a_login()
 
     def _limpiar(self):
@@ -1116,8 +1123,14 @@ class PantallaDashboard(tk.Frame):
         sb = self._sidebar
 
         # Logo + usuario
-        tk.Label(sb, text="ciphie", font=("Courier New", 15, "bold"), fg=ACCENT, bg=BG_PANEL
-                 ).pack(pady=(22, 2), padx=18, anchor="w")
+        if _QR_OK and _LOGO_PATH.exists():
+            _logo_img = ImageTk.PhotoImage(Image.open(_LOGO_PATH).resize((80, 80), Image.LANCZOS))
+            lbl_logo = tk.Label(sb, image=_logo_img, bg=BG_PANEL)
+            lbl_logo.image = _logo_img  # mantener referencia
+            lbl_logo.pack(pady=(18, 4), padx=18, anchor="w")
+        else:
+            tk.Label(sb, text="ciphie", font=("Courier New", 15, "bold"), fg=ACCENT, bg=BG_PANEL
+                     ).pack(pady=(22, 2), padx=18, anchor="w")
         tk.Label(sb, text=f"@{self.usuario.username}", font=FONT_TINY, fg=FG_DIM, bg=BG_PANEL
                  ).pack(padx=18, anchor="w", pady=(0, 14))
         tk.Frame(sb, height=1, bg=BORDER).pack(fill="x")
