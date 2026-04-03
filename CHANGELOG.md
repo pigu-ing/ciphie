@@ -9,6 +9,22 @@ y este proyecto sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+- **Bloqueo configurable por el usuario**: la duración del bloqueo por intentos fallidos se puede configurar desde Perfil → Seguridad. Opciones: 5, 10, 15, 30 o 60 minutos. El valor se persiste en la columna `lockout_minutes` de la tabla `users` (migración automática, default 5 min).
+- **Email de alerta por bloqueo de cuenta**: al alcanzar el límite de intentos fallidos, se envía un email al dueño de la cuenta con la hora de desbloqueo y recomendaciones. No interrumpe el flujo si SMTP no está configurado.
+- **Cierre automático configurable**: desde Perfil → Sesión se puede elegir el tiempo de inactividad antes del cierre automático (30 s, 1 min, 1 min 30 s … hasta 5 min). Default 5 minutos.
+- **Mensaje de cuenta bloqueada en el login**: cuando la cuenta está bloqueada, el frontend muestra un modal de error descriptivo en lugar de ignorar el estado.
+- **Ícono de dock en macOS**: usa `AppKit.NSApplication.setApplicationIconImage_` para establecer el ícono en el dock de macOS. Fallback a `iconphoto` (PIL) si AppKit no está disponible.
+
+### Changed
+- **Límite de intentos de login**: reducido de 5 a **3 intentos** antes del bloqueo.
+- **Duración de bloqueo por defecto**: reducida de 15 a **5 minutos**.
+- **Sidebar**: revertido para mostrar siempre el texto "ciphie" (se eliminó la imagen que había reemplazado al texto).
+- **Orden del menú lateral**: "👤 usuario" ahora aparece justo debajo de "🏠 inicio".
+
+### Fixed
+- **Leak de file descriptors en SQLite**: `get_connection()` convertido a `@contextmanager` que cierra la conexión en el bloque `finally`. Anteriormente `with conn:` solo hacía commit/rollback sin cerrar, acumulando file descriptors hasta superar el límite del OS (~256 en macOS) y rompiendo los tests de `test_expiry.py`.
+
 ---
 
 ## [1.0.0] - 2026-03-31
