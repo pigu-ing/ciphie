@@ -356,7 +356,7 @@ TEXTOS: dict = {
         "nav_usuario": "👤  usuario", "nav_salir": "[ salir ]",
         "nav_config": "configuración",
         "config_titulo": "configuración",
-        "cambiar_idioma": "EN",
+        "cambiar_idioma": "ES",
         # bienvenida
         "bienvenido": "¡Hola, bienvenido", "bienvenido_sub": "Seleccioná a dónde querés ir desde el menú de la izquierda.",
         # nuevo secreto
@@ -538,7 +538,7 @@ TEXTOS: dict = {
         "nav_usuario": "👤  profile", "nav_salir": "[ sign out ]",
         "nav_config": "settings",
         "config_titulo": "settings",
-        "cambiar_idioma": "ES",
+        "cambiar_idioma": "EN",
         "bienvenido": "Hello, welcome", "bienvenido_sub": "Select where you want to go from the left menu.",
         "nuevo_secreto": "new secret", "agrega_secreto": "add a secret to your vault",
         "nombre_lbl": "name:", "categoria_lbl": "category:", "expira_lbl": "expires in:",
