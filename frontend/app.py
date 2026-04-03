@@ -354,6 +354,8 @@ TEXTOS: dict = {
         "nav_inicio": "🏠  inicio", "nav_nuevo": "➕  nuevo",
         "nav_secretos": "🔒  secretos", "nav_actividad": "📋  actividad",
         "nav_usuario": "👤  usuario", "nav_salir": "[ salir ]",
+        "nav_config": "configuración",
+        "config_titulo": "configuración",
         "cambiar_idioma": "EN",
         # bienvenida
         "bienvenido": "¡Hola, bienvenido", "bienvenido_sub": "Seleccioná a dónde querés ir desde el menú de la izquierda.",
@@ -534,6 +536,8 @@ TEXTOS: dict = {
         "nav_inicio": "🏠  home", "nav_nuevo": "➕  new",
         "nav_secretos": "🔒  secrets", "nav_actividad": "📋  activity",
         "nav_usuario": "👤  profile", "nav_salir": "[ sign out ]",
+        "nav_config": "settings",
+        "config_titulo": "settings",
         "cambiar_idioma": "ES",
         "bienvenido": "Hello, welcome", "bienvenido_sub": "Select where you want to go from the left menu.",
         "nuevo_secreto": "new secret", "agrega_secreto": "add a secret to your vault",
@@ -1243,14 +1247,27 @@ class PantallaDashboard(tk.Frame):
                 bg=BORDER if self._vista_actual == v else BG_PANEL))
             self._nav_btns[vista] = btn
 
-        # Fondo: idioma + logout
+        # Fondo: idioma + fila(logout | engranaje config)
         tk.Frame(sb, height=1, bg=BORDER).pack(side="bottom", fill="x")
-        logout = tk.Label(sb, text=T("nav_salir"), font=FONT_SMALL, fg=DANGER, bg=BG_PANEL,
-                          cursor="hand2", anchor="w", padx=18, pady=12)
-        logout.pack(side="bottom", fill="x")
+
+        fila_bottom = tk.Frame(sb, bg=BG_PANEL)
+        fila_bottom.pack(side="bottom", fill="x")
+
+        logout = tk.Label(fila_bottom, text=T("nav_salir"), font=FONT_SMALL, fg=DANGER,
+                          bg=BG_PANEL, cursor="hand2", anchor="w", padx=18, pady=12)
+        logout.pack(side="left", fill="x", expand=True)
         logout.bind("<Button-1>", lambda e: self.app.ir_a_login())
         logout.bind("<Enter>", lambda e: logout.configure(bg=BORDER))
         logout.bind("<Leave>", lambda e: logout.configure(bg=BG_PANEL))
+
+        config_btn = tk.Label(fila_bottom, text="⚙️", font=("Courier New", 14),
+                              fg=FG_DIM, bg=BG_PANEL, cursor="hand2", padx=12, pady=12)
+        config_btn.pack(side="right")
+        config_btn.bind("<Button-1>", lambda e: self._cambiar_vista("config"))
+        config_btn.bind("<Enter>",    lambda e: config_btn.configure(bg=BORDER))
+        config_btn.bind("<Leave>",    lambda e, b=config_btn: b.configure(
+            bg=BORDER if self._vista_actual == "config" else BG_PANEL))
+        self._nav_btns["config"] = config_btn
 
         lang_btn = tk.Label(sb, text=T("cambiar_idioma"), font=FONT_TINY, fg=FG_DIM, bg=BG_PANEL,
                             cursor="hand2", anchor="w", padx=18, pady=8)
@@ -1283,6 +1300,8 @@ class PantallaDashboard(tk.Frame):
             self._vista_actividad()
         elif vista == "usuario":
             self._vista_usuario()
+        elif vista == "config":
+            self._vista_config()
 
     # ---- Vista: bienvenida ----
 
@@ -1535,16 +1554,39 @@ class PantallaDashboard(tk.Frame):
 
         tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
 
-        # — Seguridad —
+        # — Cuentas —
+        tk.Label(panel, text=T("cuentas"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
+                 ).pack(anchor="w", pady=(0, 10))
+
+        fila_btns = tk.Frame(panel, bg=BG)
+        fila_btns.pack(anchor="w")
+        _boton(fila_btns, T("nueva_cuenta_btn"), self._crear_usuario_modal
+               ).pack(side="left", ipadx=10, ipady=5)
+        _boton_oscuro(fila_btns, T("cambiar_cuenta"), self._cambiar_usuario_modal
+                      ).pack(side="left", padx=(10, 0), ipadx=10, ipady=5)
+
+    # ---- Vista: configuración ----
+
+    def _vista_config(self):
+        ct = self._content
+        panel = tk.Frame(ct, bg=BG, padx=28, pady=24)
+        panel.pack(fill="both", expand=True)
+
+        tk.Label(panel, text=T("config_titulo"), font=("Courier New", 18, "bold"), fg=ACCENT, bg=BG
+                 ).pack(anchor="w")
+        tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=12)
+
+        # — 2FA —
         tk.Label(panel, text=T("seguridad"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
                  ).pack(anchor="w", pady=(0, 10))
         _boton(panel, T("config_2fa"), self._abrir_config_2fa).pack(anchor="w", ipadx=10, ipady=5)
 
-        # Duración del bloqueo por intentos fallidos
-        tk.Label(panel, text=T("lockout_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG
-                 ).pack(anchor="w", pady=(14, 0))
+        tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
 
-        # Leer valor actual desde la DB
+        # — Bloqueo por intentos fallidos —
+        tk.Label(panel, text=T("lockout_lbl"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
+                 ).pack(anchor="w", pady=(0, 6))
+
         _lockout_cur = 5
         try:
             from app.database import get_connection as _gc
@@ -1581,27 +1623,13 @@ class PantallaDashboard(tk.Frame):
 
         tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
 
-        # — Cuentas —
-        tk.Label(panel, text=T("cuentas"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
-                 ).pack(anchor="w", pady=(0, 10))
-
-        fila_btns = tk.Frame(panel, bg=BG)
-        fila_btns.pack(anchor="w")
-        _boton(fila_btns, T("nueva_cuenta_btn"), self._crear_usuario_modal
-               ).pack(side="left", ipadx=10, ipady=5)
-        _boton_oscuro(fila_btns, T("cambiar_cuenta"), self._cambiar_usuario_modal
-                      ).pack(side="left", padx=(10, 0), ipadx=10, ipady=5)
-
-        tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
-
-        # — Sesión —
+        # — Tiempo de sesión —
         tk.Label(panel, text=T("sesion_titulo"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
-                 ).pack(anchor="w", pady=(0, 10))
+                 ).pack(anchor="w", pady=(0, 6))
         tk.Label(panel, text=T("timeout_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG).pack(anchor="w")
 
         _timeout_labels = [T(k) for k, _ in TIMEOUT_OPCIONES]
         _timeout_ms_map  = {T(k): ms for k, ms in TIMEOUT_OPCIONES}
-        # determinar etiqueta actual
         _cur_label = next(
             (T(k) for k, ms in TIMEOUT_OPCIONES if ms == self._timeout_ms),
             _timeout_labels[-1],
