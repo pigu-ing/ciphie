@@ -23,20 +23,56 @@ from app.database import (
 
 inicializar_bd()
 
+# PIL support (para logo)
+try:
+    from PIL import Image, ImageTk
+    _PIL_OK = True
+except ImportError:
+    _PIL_OK = False
+
 # QR code support (opcional — instalar con: pip install qrcode[pil])
 try:
     import qrcode
     from io import BytesIO
-    from PIL import Image, ImageTk
-    _QR_OK = True
+    _QR_OK = _PIL_OK
 except ImportError:
     _QR_OK = False
+
+# Icono nativo macOS (dock)
+try:
+    from AppKit import NSApplication, NSImage as _NSImage
+    _APPKIT_OK = True
+except ImportError:
+    _APPKIT_OK = False
 
 # Logo de la aplicacion
 _LOGO_PATH = Path(__file__).resolve().parent / "public" / "▌.png"
 
 # Tiempo de inactividad antes de cerrar sesion automaticamente (ms)
-INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000  # 10 minutos
+INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000  # 5 minutos (predeterminado)
+
+# Opciones de duración de bloqueo: (etiqueta_key, minutos)
+LOCKOUT_OPCIONES = [
+    ("lockout_5m",   5),
+    ("lockout_10m", 10),
+    ("lockout_15m", 15),
+    ("lockout_30m", 30),
+    ("lockout_60m", 60),
+]
+
+# Opciones de cierre automatico por inactividad: (etiqueta_key, milisegundos)
+TIMEOUT_OPCIONES = [
+    ("timeout_30s",  30_000),
+    ("timeout_1m",   60_000),
+    ("timeout_1m30", 90_000),
+    ("timeout_2m",  120_000),
+    ("timeout_2m30",150_000),
+    ("timeout_3m",  180_000),
+    ("timeout_3m30",210_000),
+    ("timeout_4m",  240_000),
+    ("timeout_4m30",270_000),
+    ("timeout_5m",  300_000),
+]
 
 # ---------------------------------------------------------------------------
 # Paleta de colores
@@ -395,7 +431,7 @@ TEXTOS: dict = {
         "totp_activado": "app autenticadora configurada.",
         # sesión
         "sesion_expirada": "sesión expirada",
-        "sesion_expiro": "Tu sesión expiró por inactividad (10 min).",
+        "sesion_expiro": "Tu sesión expiró por inactividad.",
         # fortaleza
         "muy_debil": "muy débil", "debil": "débil", "media": "media", "fuerte": "fuerte",
         # verificar 2fa antes de
@@ -423,6 +459,28 @@ TEXTOS: dict = {
         "criterio_len": "12+ chars", "criterio_case": "may/min",
         "criterio_num": "números", "criterio_special": "símbolos",
         "simbolo_invalido": "(Este símbolo no está permitido)",
+        # bloqueo por intentos fallidos
+        "cuenta_bloqueada": "cuenta bloqueada",
+        "cuenta_bloqueada_msg": "Demasiados intentos fallidos.\nVolvé a intentar en unos minutos.",
+        "lockout_lbl": "duración del bloqueo por intentos fallidos:",
+        "lockout_5m": "5 minutos",
+        "lockout_10m": "10 minutos",
+        "lockout_15m": "15 minutos",
+        "lockout_30m": "30 minutos",
+        "lockout_60m": "1 hora",
+        # sesion / timeout
+        "sesion_titulo": "sesión",
+        "timeout_lbl": "cierre automático por inactividad:",
+        "timeout_30s": "30 segundos",
+        "timeout_1m": "1 minuto",
+        "timeout_1m30": "1 min 30 seg",
+        "timeout_2m": "2 minutos",
+        "timeout_2m30": "2 min 30 seg",
+        "timeout_3m": "3 minutos",
+        "timeout_3m30": "3 min 30 seg",
+        "timeout_4m": "4 minutos",
+        "timeout_4m30": "4 min 30 seg",
+        "timeout_5m": "5 minutos",
         # nombres de categorías
         "cat_contrasena": "contraseña", "cat_tarjeta": "tarjeta", "cat_api_key": "api key",
         "cat_token": "token", "cat_nota": "nota", "cat_env": "env", "cat_otro": "otro",
@@ -543,7 +601,7 @@ TEXTOS: dict = {
         "cod_no_coincide": "code does not match.", "incorrecto": "incorrect",
         "totp_activado": "authenticator app configured.",
         "sesion_expirada": "session expired",
-        "sesion_expiro": "Your session expired due to inactivity (10 min).",
+        "sesion_expiro": "Your session expired due to inactivity.",
         "muy_debil": "very weak", "debil": "weak", "media": "medium", "fuerte": "strong",
         "verificar_identidad": "verify identity",
         "ingresa_cod_app": "enter the code from your authenticator app:",
@@ -568,6 +626,28 @@ TEXTOS: dict = {
         "criterio_len": "12+ chars", "criterio_case": "upper/lower",
         "criterio_num": "numbers", "criterio_special": "symbols",
         "simbolo_invalido": "(This symbol is not allowed)",
+        # lockout
+        "cuenta_bloqueada": "account locked",
+        "cuenta_bloqueada_msg": "Too many failed attempts.\nTry again in a few minutes.",
+        "lockout_lbl": "lockout duration (failed attempts):",
+        "lockout_5m": "5 minutes",
+        "lockout_10m": "10 minutes",
+        "lockout_15m": "15 minutes",
+        "lockout_30m": "30 minutes",
+        "lockout_60m": "1 hour",
+        # session / timeout
+        "sesion_titulo": "session",
+        "timeout_lbl": "auto-close on inactivity:",
+        "timeout_30s": "30 seconds",
+        "timeout_1m": "1 minute",
+        "timeout_1m30": "1 min 30 sec",
+        "timeout_2m": "2 minutes",
+        "timeout_2m30": "2 min 30 sec",
+        "timeout_3m": "3 minutes",
+        "timeout_3m30": "3 min 30 sec",
+        "timeout_4m": "4 minutes",
+        "timeout_4m30": "4 min 30 sec",
+        "timeout_5m": "5 minutes",
         # category names
         "cat_contrasena": "password", "cat_tarjeta": "card", "cat_api_key": "api key",
         "cat_token": "token", "cat_nota": "note", "cat_env": "env", "cat_otro": "other",
@@ -671,7 +751,13 @@ class Aplicacion(tk.Tk):
         self.resizable(False, False)
         self.configure(bg=BG)
         self.eval("tk::PlaceWindow . center")
-        if _QR_OK and _LOGO_PATH.exists():
+        if _APPKIT_OK and _LOGO_PATH.exists():
+            try:
+                _ns_img = _NSImage.alloc().initWithContentsOfFile_(str(_LOGO_PATH))
+                NSApplication.sharedApplication().setApplicationIconImage_(_ns_img)
+            except Exception:
+                pass
+        elif _PIL_OK and _LOGO_PATH.exists():
             _icon = ImageTk.PhotoImage(Image.open(_LOGO_PATH).resize((64, 64), Image.LANCZOS))
             self.iconphoto(True, _icon)
             self._logo_icon = _icon  # mantener referencia
@@ -755,7 +841,9 @@ class PantallaLogin(tk.Frame):
         except Exception as e:
             _modal_msg(self, T("error"), str(e), "error")
             return
-        if estado == "fallo":
+        if estado == "bloqueado":
+            _modal_msg(self, T("cuenta_bloqueada"), T("cuenta_bloqueada_msg"), "error")
+        elif estado == "fallo":
             _modal_msg(self, T("acceso_denegado"), T("usuario_pass_incorrectos"), "error")
         elif estado == "ok":
             self.app.ir_a_dashboard(usuario)
@@ -1087,6 +1175,7 @@ class PantallaDashboard(tk.Frame):
         self.usuario = usuario
         self._vista_actual = None
         self._timer_inactividad = None
+        self._timeout_ms = INACTIVITY_TIMEOUT_MS
         self._construir_layout()
         self._cambiar_vista("bienvenida")
         # Timer de inactividad
@@ -1101,7 +1190,7 @@ class PantallaDashboard(tk.Frame):
     def _reiniciar_timer(self):
         if self._timer_inactividad:
             self.after_cancel(self._timer_inactividad)
-        self._timer_inactividad = self.after(INACTIVITY_TIMEOUT_MS, self._cerrar_sesion_inactiva)
+        self._timer_inactividad = self.after(self._timeout_ms, self._cerrar_sesion_inactiva)
 
     def _cerrar_sesion_inactiva(self):
         _modal_msg(self._content, T("sesion_expirada"), T("sesion_expiro"), "warning",
@@ -1129,14 +1218,8 @@ class PantallaDashboard(tk.Frame):
         sb = self._sidebar
 
         # Logo + usuario
-        if _QR_OK and _LOGO_PATH.exists():
-            _logo_img = ImageTk.PhotoImage(Image.open(_LOGO_PATH).resize((80, 80), Image.LANCZOS))
-            lbl_logo = tk.Label(sb, image=_logo_img, bg=BG_PANEL)
-            lbl_logo.image = _logo_img  # mantener referencia
-            lbl_logo.pack(pady=(18, 4), padx=18, anchor="w")
-        else:
-            tk.Label(sb, text="ciphie", font=("Courier New", 15, "bold"), fg=ACCENT, bg=BG_PANEL
-                     ).pack(pady=(22, 2), padx=18, anchor="w")
+        tk.Label(sb, text="ciphie", font=("Courier New", 15, "bold"), fg=ACCENT, bg=BG_PANEL
+                 ).pack(pady=(22, 2), padx=18, anchor="w")
         tk.Label(sb, text=f"@{self.usuario.username}", font=FONT_TINY, fg=FG_DIM, bg=BG_PANEL
                  ).pack(padx=18, anchor="w", pady=(0, 14))
         tk.Frame(sb, height=1, bg=BORDER).pack(fill="x")
@@ -1145,10 +1228,10 @@ class PantallaDashboard(tk.Frame):
         self._nav_btns: dict[str, tk.Label] = {}
         nav_items = [
             (T("nav_inicio"),    "bienvenida"),
+            (T("nav_usuario"),   "usuario"),
             (T("nav_nuevo"),     "inicio"),
             (T("nav_secretos"),  "secretos"),
             (T("nav_actividad"), "actividad"),
-            (T("nav_usuario"),   "usuario"),
         ]
         for texto, vista in nav_items:
             btn = tk.Label(sb, text=texto, font=FONT_SMALL, fg=FG_DIM, bg=BG_PANEL,
@@ -1457,6 +1540,45 @@ class PantallaDashboard(tk.Frame):
                  ).pack(anchor="w", pady=(0, 10))
         _boton(panel, T("config_2fa"), self._abrir_config_2fa).pack(anchor="w", ipadx=10, ipady=5)
 
+        # Duración del bloqueo por intentos fallidos
+        tk.Label(panel, text=T("lockout_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG
+                 ).pack(anchor="w", pady=(14, 0))
+
+        # Leer valor actual desde la DB
+        _lockout_cur = 5
+        try:
+            from app.database import get_connection as _gc
+            with _gc() as _c:
+                _row = _c.execute(
+                    "SELECT lockout_minutes FROM users WHERE id=?", (self.usuario.id,)
+                ).fetchone()
+                if _row and _row["lockout_minutes"]:
+                    _lockout_cur = _row["lockout_minutes"]
+        except Exception:
+            pass
+
+        _lockout_labels  = [T(k) for k, _ in LOCKOUT_OPCIONES]
+        _lockout_min_map = {T(k): m for k, m in LOCKOUT_OPCIONES}
+        _lockout_cur_lbl = next(
+            (T(k) for k, m in LOCKOUT_OPCIONES if m == _lockout_cur),
+            _lockout_labels[0],
+        )
+        _lockout_var = tk.StringVar(value=_lockout_cur_lbl)
+
+        def _on_lockout_change(*_):
+            try:
+                auth.set_lockout_minutes(self.usuario.id, _lockout_min_map[_lockout_var.get()])
+            except Exception:
+                pass
+
+        om_lockout = tk.OptionMenu(panel, _lockout_var, *_lockout_labels, command=_on_lockout_change)
+        om_lockout.configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
+                             highlightbackground=BG_ENTRY, relief="flat", font=FONT_SMALL,
+                             cursor="hand2", width=18)
+        om_lockout["menu"].configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
+                                     font=FONT_SMALL, bd=0)
+        om_lockout.pack(anchor="w", pady=(4, 0))
+
         tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
 
         # — Cuentas —
@@ -1469,6 +1591,34 @@ class PantallaDashboard(tk.Frame):
                ).pack(side="left", ipadx=10, ipady=5)
         _boton_oscuro(fila_btns, T("cambiar_cuenta"), self._cambiar_usuario_modal
                       ).pack(side="left", padx=(10, 0), ipadx=10, ipady=5)
+
+        tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
+
+        # — Sesión —
+        tk.Label(panel, text=T("sesion_titulo"), font=("Courier New", 14, "bold"), fg=FG_DIM, bg=BG
+                 ).pack(anchor="w", pady=(0, 10))
+        tk.Label(panel, text=T("timeout_lbl"), font=FONT_SMALL, fg=FG_DIM, bg=BG).pack(anchor="w")
+
+        _timeout_labels = [T(k) for k, _ in TIMEOUT_OPCIONES]
+        _timeout_ms_map  = {T(k): ms for k, ms in TIMEOUT_OPCIONES}
+        # determinar etiqueta actual
+        _cur_label = next(
+            (T(k) for k, ms in TIMEOUT_OPCIONES if ms == self._timeout_ms),
+            _timeout_labels[-1],
+        )
+        _timeout_var = tk.StringVar(value=_cur_label)
+
+        def _on_timeout_change(*_):
+            self._timeout_ms = _timeout_ms_map[_timeout_var.get()]
+            self._reiniciar_timer()
+
+        om_timeout = tk.OptionMenu(panel, _timeout_var, *_timeout_labels, command=_on_timeout_change)
+        om_timeout.configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
+                             highlightbackground=BG_ENTRY, relief="flat", font=FONT_SMALL,
+                             cursor="hand2", width=18)
+        om_timeout["menu"].configure(bg=BG_ENTRY, fg=FG, activebackground=BORDER, activeforeground=FG,
+                                     font=FONT_SMALL, bd=0)
+        om_timeout.pack(anchor="w", pady=(4, 0))
 
     def _editar_perfil_modal(self):
         def construir(box, cerrar):

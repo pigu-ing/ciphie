@@ -5,6 +5,7 @@ app/database.py — Base de datos con sqlite3 (stdlib).
 import os
 import sqlite3
 import stat
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,11 +13,15 @@ from pathlib import Path
 from app.config import DB_PATH
 
 
-def get_connection() -> sqlite3.Connection:
+@contextmanager
+def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def inicializar_bd() -> None:
@@ -44,6 +49,7 @@ def inicializar_bd() -> None:
             ("phone_number",            "TEXT"),
             ("failed_login_attempts",   "INTEGER NOT NULL DEFAULT 0"),
             ("locked_until",            "TEXT"),
+            ("lockout_minutes",         "INTEGER NOT NULL DEFAULT 5"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {columna} {definicion}")

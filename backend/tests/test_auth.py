@@ -107,16 +107,16 @@ class TestAutenticarPaso1:
         assert resultado == "fallo"
         assert usuario is None
 
-    def test_bloqueo_tras_5_intentos_fallidos(self):
+    def test_bloqueo_tras_3_intentos_fallidos(self):
         registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
-        for _ in range(5):
+        for _ in range(3):
             autenticar_paso1("bob", "wrongpassword")
         resultado, _ = autenticar_paso1("bob", "password12345")
         assert resultado == "bloqueado"
 
     def test_contador_se_resetea_en_login_exitoso(self):
         registrar_usuario("bob", "bob@example.com", "password12345", "frase bob")
-        for _ in range(3):
+        for _ in range(2):  # menos del límite de bloqueo (3)
             autenticar_paso1("bob", "wrongpassword")
         resultado, usuario = autenticar_paso1("bob", "password12345")
         assert resultado == "ok"

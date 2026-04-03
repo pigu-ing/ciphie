@@ -543,8 +543,8 @@ def desactivar_2fa(user_id: int) -> None:
 # Login en 2 pasos
 # ---------------------------------------------------------------------------
 
-_MAX_LOGIN_INTENTOS = 5
-_LOCKOUT_MINUTOS = 15
+_MAX_LOGIN_INTENTOS = 3
+_LOCKOUT_MINUTOS = 5
 
 
 def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None]":
@@ -560,7 +560,7 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
     with get_connection() as conn:
         fila = conn.execute(
             "SELECT id, username, email, hashed_password, is_active, totp_enabled, "
-            "failed_login_attempts, locked_until "
+            "failed_login_attempts, locked_until, lockout_minutes "
             "FROM users WHERE username=?",
             (username,),
         ).fetchone()
@@ -583,13 +583,27 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
     if not _verify_password(password, fila["hashed_password"]):
         nuevos_intentos = (fila["failed_login_attempts"] or 0) + 1
         if nuevos_intentos >= _MAX_LOGIN_INTENTOS:
-            bloqueado_hasta = (datetime.now() + timedelta(minutes=_LOCKOUT_MINUTOS)).isoformat()
+            minutos = fila["lockout_minutes"] or _LOCKOUT_MINUTOS
+            bloqueado_hasta = (datetime.now() + timedelta(minutes=minutos)).isoformat()
             with get_connection() as conn:
                 conn.execute(
                     "UPDATE users SET failed_login_attempts=?, locked_until=? WHERE username=?",
                     (nuevos_intentos, bloqueado_hasta, username),
                 )
                 conn.commit()
+            try:
+                _enviar_email(
+                    fila["email"],
+                    "Alerta de seguridad — Ciphie",
+                    f"Alguien intentó acceder a tu cuenta @{username} "
+                    f"y falló {_MAX_LOGIN_INTENTOS} veces.\n\n"
+                    f"Tu cuenta fue bloqueada por {minutos} minutos "
+                    f"(hasta las {bloqueado_hasta[:19].replace('T', ' ')}).\n\n"
+                    "Si fuiste vos, esperá y volvé a intentar.\n"
+                    "Si no fuiste vos, considerá cambiar tu contraseña."
+                )
+            except Exception:
+                pass  # SMTP no configurado o error de red
         else:
             with get_connection() as conn:
                 conn.execute(
@@ -615,6 +629,16 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
         return ("ok", usuario)
 
     return ("2fa_requerido", None)
+
+
+def set_lockout_minutes(user_id: int, minutes: int) -> None:
+    """Guarda la duración de bloqueo preferida del usuario (en minutos)."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET lockout_minutes=? WHERE id=?",
+            (minutes, user_id),
+        )
+        conn.commit()
 
 
 def _obtener_usuario_activo(username: str) -> "Usuario | None":
