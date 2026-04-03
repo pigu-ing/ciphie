@@ -27,6 +27,40 @@ Registro personal del progreso, decisiones y aprendizajes durante la construcci�
 
 ---
 
+## [2026-04-03]
+
+### Qué hice hoy
+- **UI/UX**: corregí el ícono de la app en macOS — ahora usa `AppKit.NSApplication.setApplicationIconImage_` para que aparezca correctamente en el dock; fallback a `iconphoto` (PIL) si AppKit no está disponible. Separé el import de PIL del de `qrcode` para que el ícono funcione independientemente del soporte QR.
+- **Sidebar**: revertí el cambio que había puesto la imagen del logo donde antes decía "ciphie" — el texto vuelve a mostrarse siempre.
+- **Menú lateral**: moví "👤 usuario" para que quede justo debajo de "🏠 inicio".
+- **Cierre automático configurable**: agregué un selector en Perfil → Sesión para que el usuario elija el tiempo de inactividad (30 s, 1 min, 1 min 30 s … hasta 5 min). Se aplica inmediatamente sin reiniciar sesión.
+- **Bug crítico de tests**: corregí un leak de file descriptors en `database.py`. `get_connection()` devolvía un `sqlite3.Connection` y los callers lo usaban con `with conn:`, que en Python solo hace commit/rollback pero **no cierra la conexión**. Tras ~80 tests el proceso superaba el límite del OS (~256 FDs) y `test_expiry.py` fallaba con `OSError: Too many open files`. Fix: convertí `get_connection()` a `@contextmanager` que cierra la conexión en el `finally`.
+- **Seguridad — bloqueo de cuenta**: reducí el límite de intentos de login de 5 a **3**; bajé el tiempo de bloqueo por defecto de 15 a **5 minutos**. Al bloquearse la cuenta se envía automáticamente un email de alerta al dueño con la hora de desbloqueo (silencioso si SMTP no configurado).
+- **Bloqueo configurable por usuario**: agregué columna `lockout_minutes` en la tabla `users` (ALTER TABLE, default 5, compatible con usuarios existentes) y la función `set_lockout_minutes()` en `auth.py`. Desde Perfil → Seguridad el usuario puede elegir entre 5, 10, 15, 30 o 60 minutos.
+- **Frontend**: el estado `"bloqueado"` que devuelve `autenticar_paso1()` ahora muestra un modal de error descriptivo en la pantalla de login (antes se ignoraba silenciosamente).
+- Actualicé `README.md` y `CHANGELOG.md` con todos los cambios.
+
+### Qué aprendí
+- `with sqlite3.Connection` **no cierra la conexión** — solo gestiona la transacción (commit/rollback). Para cerrar hay que llamar `conn.close()` explícitamente o usar un `@contextmanager` propio. En CPython los objetos se cierran al garbage-collectarse, pero con muchos tests en el mismo proceso el GC no siempre corre a tiempo.
+- `AppKit.NSApplication.setApplicationIconImage_` es la forma correcta de cambiar el ícono del dock en macOS desde Python. `iconphoto()` de Tkinter funciona en Linux/Windows pero no cambia el dock en macOS.
+- Separar imports opcionales por funcionalidad (PIL para imágenes, qrcode para QR) es mejor que tener una sola flag `_QR_OK` que bloquee features independientes.
+
+### Problemas encontrados
+- El test `test_contador_se_resetea_en_login_exitoso` usaba exactamente 3 intentos fallidos seguidos de uno correcto — eso pasaba con el límite anterior de 5, pero con el nuevo límite de 3 el tercer intento ya bloqueaba la cuenta.
+- El estado `"bloqueado"` devuelto por `autenticar_paso1()` no tenía manejo en el frontend: el `if/elif` no cubría ese caso y el login simplemente no hacía nada visible para el usuario.
+
+### Cómo los resolví
+- Reduje el test de contador a 2 intentos fallidos (por debajo del nuevo límite de 3).
+- Agregué el `elif estado == "bloqueado"` antes del `elif estado == "fallo"` en `PantallaLogin._login()`.
+
+### Próximos pasos
+- [ ] Capturas de pantalla reales en `docs/screenshots/`
+- [ ] Publicar en PyPI
+- [ ] Notificaciones proactivas cuando un secreto está por vencer
+- [ ] Búsqueda/filtro en la lista de secretos
+
+---
+
 ## [2026-03-31] — continuación (release v1.0.0)
 
 ### Qué hice hoy (segunda sesión)
