@@ -27,6 +27,32 @@ Registro personal del progreso, decisiones y aprendizajes durante la construcci�
 
 ---
 
+## [2026-04-07]
+
+### Qué hice hoy
+- **Eliminar cuenta**: agregué `eliminar_usuario()` en `database.py` con borrado en cascada (versiones → secretos → auditoría → usuario). En la pantalla de usuario aparece el botón "> eliminar cuenta" al final, separado por un divisor. Si el usuario tiene 2FA activo, primero pide verificación; si no, va directo a confirmación.
+- **Email eliminado como método 2FA**: `get_metodos_2fa_disponibles()` en `auth.py` ya no incluye el método `email` ni chequea SMTP. Lo quité también de la pantalla de configuración de 2FA, de `PantallaElegir2FA`, de `_elegir()` y de `_verificar_2fa_antes_de()`. Ahora solo quedan **app autenticadora (TOTP)** y **huella dactilar (Touch ID/biométrico)**.
+- **UX sidebar — acceso a pantalla de usuario**: el `@username` debajo de "ciphie" se convirtió en un elemento clickeable que navega a la pantalla de usuario. Se le agregaron tres puntos `···` a la derecha. Al hover, ambos se iluminan en verde (ACCENT). Se eliminó el item "👤 usuario" del menú lateral.
+- **Login — usuario inexistente**: `autenticar_paso1()` ahora retorna `("inexistente", None)` cuando el usuario no existe en la base de datos, en lugar de agruparlo con `"fallo"`. El frontend muestra un modal con título "acceso denegado" y mensaje "Usuario inexistente." — útil para cuando alguien intenta loguearse con una cuenta eliminada.
+
+### Qué aprendí
+- Distinguir entre "usuario no existe" y "contraseña incorrecta" en el retorno de `autenticar_paso1()` mejora la claridad del error sin comprometer seguridad (el username ya es conocido por el atacante en este contexto de app local).
+- Al borrar un usuario hay que respetar las FK constraints del schema: `secret_versions` referencia a `secrets`, que referencia a `users` — el orden de borrado importa.
+
+### Problemas encontrados
+- Un test existente (`test_usuario_inexistente_retorna_fallo`) esperaba `"fallo"` para usuario inexistente; falló al cambiar el retorno a `"inexistente"`.
+
+### Cómo los resolví
+- Actualicé el test para que espere `"inexistente"` y lo renombré a `test_usuario_inexistente_retorna_inexistente`.
+
+### Próximos pasos
+- [ ] Capturas de pantalla reales en `docs/screenshots/`
+- [ ] Publicar en PyPI
+- [ ] Notificaciones proactivas cuando un secreto está por vencer
+- [ ] Búsqueda/filtro en la lista de secretos
+
+---
+
 ## [2026-04-03]
 
 ### Qué hice hoy
