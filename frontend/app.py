@@ -311,6 +311,7 @@ TEXTOS: dict = {
         "campos_vacios": "campos vacíos", "completa_campos": "completa todos los campos.",
         "acceso_denegado": "acceso denegado",
         "usuario_pass_incorrectos": "usuario o contraseña incorrectos.",
+        "usuario_inexistente": "Usuario inexistente.",
         # registro
         "crear_cuenta_titulo": "crear cuenta", "nuevo_usuario_tag": "[ nuevo usuario ]",
         "ya_tengo_cuenta": "[ ya tengo cuenta ]", "crear_cuenta_btn": "> crear cuenta",
@@ -504,6 +505,7 @@ TEXTOS: dict = {
         "campos_vacios": "empty fields", "completa_campos": "please fill in all fields.",
         "acceso_denegado": "access denied",
         "usuario_pass_incorrectos": "incorrect username or password.",
+        "usuario_inexistente": "User does not exist.",
         "crear_cuenta_titulo": "create account", "nuevo_usuario_tag": "[ new user ]",
         "ya_tengo_cuenta": "[ already have an account ]", "crear_cuenta_btn": "> create account",
         "campos_obligatorios": "please fill in all required fields.",
@@ -853,6 +855,8 @@ class PantallaLogin(tk.Frame):
             return
         if estado == "bloqueado":
             _modal_msg(self, T("cuenta_bloqueada"), T("cuenta_bloqueada_msg"), "error")
+        elif estado == "inexistente":
+            _modal_msg(self, T("acceso_denegado"), T("usuario_inexistente"), "error")
         elif estado == "fallo":
             _modal_msg(self, T("acceso_denegado"), T("usuario_pass_incorrectos"), "error")
         elif estado == "ok":
@@ -1225,15 +1229,24 @@ class PantallaDashboard(tk.Frame):
         # Logo + usuario
         tk.Label(sb, text="ciphie", font=("Courier New", 15, "bold"), fg=ACCENT, bg=BG_PANEL
                  ).pack(pady=(22, 2), padx=18, anchor="w")
-        tk.Label(sb, text=f"@{self.usuario.username}", font=FONT_TINY, fg=FG_DIM, bg=BG_PANEL
-                 ).pack(padx=18, anchor="w", pady=(0, 14))
+        fila_user = tk.Frame(sb, bg=BG_PANEL, cursor="hand2")
+        fila_user.pack(fill="x", padx=18, pady=(0, 14))
+        lbl_user = tk.Label(fila_user, text=f"@{self.usuario.username}", font=FONT_TINY,
+                            fg=FG_DIM, bg=BG_PANEL, cursor="hand2", anchor="w")
+        lbl_user.pack(side="left")
+        lbl_dots = tk.Label(fila_user, text="···", font=FONT_TINY,
+                            fg=FG_DIM, bg=BG_PANEL, cursor="hand2")
+        lbl_dots.pack(side="right")
+        for w in (fila_user, lbl_user, lbl_dots):
+            w.bind("<Button-1>", lambda e: self._cambiar_vista("usuario"))
+            w.bind("<Enter>", lambda e: [x.configure(fg=ACCENT) for x in (lbl_user, lbl_dots)])
+            w.bind("<Leave>", lambda e: [x.configure(fg=FG_DIM) for x in (lbl_user, lbl_dots)])
         tk.Frame(sb, height=1, bg=BORDER).pack(fill="x")
 
         # Nav items
         self._nav_btns: dict[str, tk.Label] = {}
         nav_items = [
             (T("nav_inicio"),    "bienvenida"),
-            (T("nav_usuario"),   "usuario"),
             (T("nav_nuevo"),     "inicio"),
             (T("nav_secretos"),  "secretos"),
             (T("nav_actividad"), "actividad"),

@@ -539,10 +539,11 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
     Primer paso: verifica usuario y contrasena.
 
     Retorna:
-        ('ok',            usuario) — sin 2FA, login completo
-        ('2fa_requerido', None)    — credenciales ok, ir a pantalla de elección de método
-        ('fallo',         None)    — credenciales incorrectas o cuenta inactiva
-        ('bloqueado',     None)    — cuenta bloqueada por demasiados intentos fallidos
+        ('ok',              usuario) — sin 2FA, login completo
+        ('2fa_requerido',   None)    — credenciales ok, ir a pantalla de elección de método
+        ('fallo',           None)    — credenciales incorrectas o cuenta inactiva
+        ('inexistente',     None)    — el usuario no existe en la base de datos
+        ('bloqueado',       None)    — cuenta bloqueada por demasiados intentos fallidos
     """
     with get_connection() as conn:
         fila = conn.execute(
@@ -552,7 +553,9 @@ def autenticar_paso1(username: str, password: str) -> "tuple[str, Usuario | None
             (username,),
         ).fetchone()
 
-    if fila is None or not fila["is_active"]:
+    if fila is None:
+        return ("inexistente", None)
+    if not fila["is_active"]:
         return ("fallo", None)
 
     # Verificar bloqueo por intentos fallidos

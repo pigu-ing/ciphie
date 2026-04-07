@@ -102,9 +102,9 @@ class TestAutenticarPaso1:
         assert resultado == "fallo"
         assert usuario is None
 
-    def test_usuario_inexistente_retorna_fallo(self):
+    def test_usuario_inexistente_retorna_inexistente(self):
         resultado, usuario = autenticar_paso1("nadie", "password12345")
-        assert resultado == "fallo"
+        assert resultado == "inexistente"
         assert usuario is None
 
     def test_bloqueo_tras_3_intentos_fallidos(self):
