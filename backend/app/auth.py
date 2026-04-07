@@ -418,16 +418,12 @@ def verificar_totp(secreto_b32: str, codigo: str) -> bool:
 def get_metodos_2fa_disponibles(username: str) -> list:
     """
     Devuelve los metodos de 2FA disponibles para el usuario:
-      'email'      — si SMTP esta configurado
-      'phone'      — si el usuario tiene phone_number y Twilio esta configurado
       'totp_app'   — si el usuario tiene secreto TOTP activo
       'biometrico' — si el metodo configurado es biometrico (Touch ID/huella)
     """
-    from app.config import get_smtp_config, get_twilio_config
-
     with get_connection() as conn:
         fila = conn.execute(
-            "SELECT totp_enabled, totp_method, totp_secret, phone_number "
+            "SELECT totp_enabled, totp_method, totp_secret "
             "FROM users WHERE username=?",
             (username,),
         ).fetchone()
@@ -435,15 +431,6 @@ def get_metodos_2fa_disponibles(username: str) -> list:
         return []
 
     metodos = []
-    smtp = get_smtp_config()
-    if smtp["host"] and smtp["user"]:
-        metodos.append("email")
-
-    twilio = get_twilio_config()
-    if fila["phone_number"] and all(
-        [twilio["account_sid"], twilio["auth_token"], twilio["from_number"]]
-    ):
-        metodos.append("phone")
 
     if fila["totp_enabled"] and fila["totp_method"] == "app" and fila["totp_secret"]:
         metodos.append("totp_app")

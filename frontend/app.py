@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app import auth, crypto
 from app.database import (
-    agregar_secreto, editar_secreto, eliminar_secreto, inicializar_bd,
+    agregar_secreto, editar_secreto, eliminar_secreto, eliminar_usuario, inicializar_bd,
     listar_auditoria, listar_secretos, listar_usuarios_basico, listar_versiones,
     obtener_secreto, registrar_auditoria, restaurar_version,
     secretos_por_vencer, secretos_vencidos,
@@ -455,6 +455,9 @@ TEXTOS: dict = {
         "vencidos_banner": "🔴  {n} secreto(s) vencido(s)",
         # perfil
         "estado_lbl": "estado", "usuario_tag": "usuario", "email_tag": "email",
+        "eliminar_cuenta_btn": "> eliminar cuenta",
+        "eliminar_cuenta_confirmar": "¿Eliminar tu cuenta?\nSe borrarán todos tus secretos y datos.\nEsta acción no se puede deshacer.",
+        "cuenta_eliminada": "Cuenta eliminada.",
         # fecha placeholder
         "fecha_placeholder": "AAAA-MM-DD",
         # criterios barra contraseña
@@ -624,6 +627,9 @@ TEXTOS: dict = {
         "vencidos_banner": "🔴  {n} expired secret(s)",
         # perfil
         "estado_lbl": "status", "usuario_tag": "username", "email_tag": "email",
+        "eliminar_cuenta_btn": "> delete account",
+        "eliminar_cuenta_confirmar": "Delete your account?\nAll your secrets and data will be erased.\nThis cannot be undone.",
+        "cuenta_eliminada": "Account deleted.",
         # fecha placeholder
         "fecha_placeholder": "YYYY-MM-DD",
         # criterios barra contraseña
@@ -1069,9 +1075,6 @@ class PantallaElegir2FA(tk.Frame):
             _boton(self, T("touch_id_configurado"),
                    self._touch_id, color=CURSOR_COL).pack(fill="x", ipady=8, pady=(0,8))
             hay_opciones = True
-        if "email" in metodos:
-            _boton(self, T("correo_2fa"), lambda: self._elegir("email")).pack(fill="x", ipady=8, pady=(0,8))
-            hay_opciones = True
         if "phone" in metodos:
             _boton(self, T("celular_2fa"), lambda: self._elegir("phone")).pack(fill="x", ipady=8, pady=(0,8))
             hay_opciones = True
@@ -1091,9 +1094,7 @@ class PantallaElegir2FA(tk.Frame):
 
     def _elegir(self, method: str):
         try:
-            if method == "email":
-                auth.generar_otp_2fa_email(self.username)
-            elif method == "phone":
+            if method == "phone":
                 auth.generar_otp_2fa_phone(self.username)
         except Exception as e:
             _modal_msg(self, T("error_enviar_codigo"), str(e), "error")
@@ -1564,6 +1565,28 @@ class PantallaDashboard(tk.Frame):
                ).pack(side="left", ipadx=10, ipady=5)
         _boton_oscuro(fila_btns, T("cambiar_cuenta"), self._cambiar_usuario_modal
                       ).pack(side="left", padx=(10, 0), ipadx=10, ipady=5)
+
+        tk.Frame(panel, height=1, bg=BORDER).pack(fill="x", pady=16)
+
+        # — Zona de peligro —
+        _boton(panel, T("eliminar_cuenta_btn"), self._eliminar_cuenta,
+               color=DANGER).pack(anchor="w", ipadx=10, ipady=5)
+
+    def _eliminar_cuenta(self):
+        cfg = auth.obtener_config_2fa(self.usuario.username)
+
+        def _ejecutar_eliminacion():
+            def _confirmar():
+                eliminar_usuario(self.usuario.id)
+                _modal_msg(self._content, T("confirmar"), T("cuenta_eliminada"),
+                           on_cerrar=self.app.ir_a_login)
+            _modal_confirmar(self._content, T("eliminar_cuenta_btn"),
+                             T("eliminar_cuenta_confirmar"), _confirmar)
+
+        if cfg and cfg.get("enabled"):
+            self._verificar_2fa_antes_de(cfg, _ejecutar_eliminacion)
+        else:
+            _ejecutar_eliminacion()
 
     # ---- Vista: configuración ----
 
@@ -2199,7 +2222,6 @@ class PantallaDashboard(tk.Frame):
         if cfg is None:
             return
 
-        smtp_ok    = auth._smtp_configurado()
         touch_ok   = _touch_id_disponible()
 
         def construir(box, cerrar):
@@ -2227,16 +2249,6 @@ class PantallaDashboard(tk.Frame):
                     totp_sec = auth.generar_secreto_totp()
                     self._setup_totp(totp_sec, auth.uri_totp(self.usuario.username, totp_sec))
                 _boton(box, T("app_autenticadora_btn"), _activar_app).pack(fill="x", ipady=5, pady=(8, 0))
-
-                if smtp_ok:
-                    def _activar_email():
-                        auth.activar_2fa(self.usuario.id, "email")
-                        _modal_msg(box, "2FA", T("2fa_email_ok", email=cfg["email"]), on_cerrar=cerrar)
-                    _boton(box, T("email_2fa_btn", email=cfg["email"]), _activar_email,
-                           color=AMARILLO).pack(fill="x", ipady=5, pady=(8, 0))
-                else:
-                    tk.Label(box, text=T("email_no_disponible"),
-                             font=FONT_TINY, fg=DANGER, bg=BG_PANEL).pack(anchor="w", pady=(4, 0))
 
                 if touch_ok:
                     def _activar_bio():
@@ -2274,31 +2286,6 @@ class PantallaDashboard(tk.Frame):
                 e.focus_set()
                 def _ok():
                     if auth.verificar_totp(cfg["secret"], e.get().strip()):
-                        cerrar()
-                        accion_ok()
-                    else:
-                        _modal_msg(box, T("error"), T("cod_incorrecto"), "error")
-                _boton(box, T("verificar_btn"), _ok).pack(fill="x", ipady=5, pady=(8, 0))
-                _boton_oscuro(box, T("cancelar"), cerrar).pack(fill="x", ipady=4, pady=(6, 0))
-            self._modal(construir)
-            return
-
-        if method == "email":
-            try:
-                auth.generar_otp_2fa_email(self.usuario.username)
-            except Exception as ex:
-                _modal_msg(self._content, T("error"), str(ex), "error")
-                return
-            def construir(box, cerrar):
-                tk.Label(box, text=T("verificar_identidad"), font=("Courier New", 13, "bold"),
-                         fg=ACCENT, bg=BG_PANEL).pack(anchor="w")
-                tk.Label(box, text=T("ingresa_cod_email"),
-                         font=FONT_SMALL, fg=FG_DIM, bg=BG_PANEL).pack(anchor="w", pady=(8, 4))
-                e = _entry(box, width=20)
-                e.pack(fill="x", ipady=5)
-                e.focus_set()
-                def _ok():
-                    if auth.verificar_otp_2fa(self.usuario.username, e.get().strip()):
                         cerrar()
                         accion_ok()
                     else:

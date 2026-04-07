@@ -267,6 +267,22 @@ def eliminar_secreto(secreto_id: int, owner_id: int) -> None:
         conn.commit()
 
 
+def eliminar_usuario(user_id: int) -> None:
+    """Elimina un usuario y todos sus datos (secretos, versiones, auditoría)."""
+    with get_connection() as conn:
+        # Obtener IDs de secretos del usuario
+        secreto_ids = [
+            row["id"] for row in
+            conn.execute("SELECT id FROM secrets WHERE owner_id = ?", (user_id,)).fetchall()
+        ]
+        for sid in secreto_ids:
+            conn.execute("DELETE FROM secret_versions WHERE secret_id = ?", (sid,))
+        conn.execute("DELETE FROM secrets WHERE owner_id = ?", (user_id,))
+        conn.execute("DELETE FROM audit_log WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # CRUD — Versionado
 # ---------------------------------------------------------------------------
